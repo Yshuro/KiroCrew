@@ -12700,7 +12700,14 @@
       "browser_sites_add_failed": "Não foi possível adicionar o site de novo: {{error}}",
       "browser_sites_turn_on_title": "Reativar este site?",
       "browser_sites_add_back_title": "Adicionar este site de volta?",
-      "browser_sites_restore_risk": "Depois, o agente do próprio app poderá abrir, ler, digitar e clicar nestas páginas no seu navegador, com a sua sessão, sem perguntar a cada vez. Permita só um site em que você confia."
+      "browser_sites_restore_risk": "Depois, o agente do próprio app poderá abrir, ler, digitar e clicar nestas páginas no seu navegador, com a sua sessão, sem perguntar a cada vez. Permita só um site em que você confia.",
+      "auto_update_title": "Atualizações",
+      "auto_update_label": "Atualizar automaticamente",
+      "auto_update_hint": "Sempre instala novas versões deste app sem perguntar. Nunca o mantém nesta versão. Uma atualização que pede novas permissões sempre espera por você.",
+      "auto_update_follow": "Seguir a configuração de atualizações ({{mode}})",
+      "auto_update_always": "Sempre",
+      "auto_update_never": "Nunca",
+      "auto_update_save_failed": "Não foi possível salvar a configuração de atualização deste app."
     },
     "appPage": {
       "loading_app": "Carregando app…",
@@ -23127,6 +23134,15 @@
         "row_label": "Silenciar sessões que {{app}} abre",
         "failed_to_save": "Não foi possível salvar o silenciamento de {{app}}.",
         "config_load_failed": "Não foi possível carregar os silenciamentos salvos dos seus apps. Os interruptores ficam indisponíveis até serem carregados."
+      },
+      "appUpdates": {
+        "title": "Atualizações de apps instalados",
+        "mode_label": "Atualizar apps automaticamente",
+        "mode_hint": "Desligado avisa você uma vez quando uma nova versão de um app instalado é publicada. Automático verifica a cada 6 horas e instala a versão quando o app está ocioso. Uma atualização que pede novas permissões sempre espera por você.",
+        "mode_off": "Desligado",
+        "mode_on": "Automático",
+        "save_failed": "Não foi possível salvar a configuração de atualização de apps.",
+        "load_failed": "Não foi possível carregar as configurações de atualização de apps."
       }
     },
     "settingsPage": {

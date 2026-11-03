@@ -12700,7 +12700,14 @@
       "browser_sites_add_failed": "No se pudo volver a añadir el sitio: {{error}}",
       "browser_sites_turn_on_title": "¿Volver a activar este sitio?",
       "browser_sites_add_back_title": "¿Volver a añadir este sitio?",
-      "browser_sites_restore_risk": "Después, el agente propio de la aplicación podrá abrir, leer, escribir y hacer clic en estas páginas en tu navegador, con tu sesión iniciada, sin preguntar cada vez. Permite solo un sitio en el que confíes."
+      "browser_sites_restore_risk": "Después, el agente propio de la aplicación podrá abrir, leer, escribir y hacer clic en estas páginas en tu navegador, con tu sesión iniciada, sin preguntar cada vez. Permite solo un sitio en el que confíes.",
+      "auto_update_title": "Actualizaciones",
+      "auto_update_label": "Actualizar automáticamente",
+      "auto_update_hint": "Siempre instala las versiones nuevas de esta app sin preguntar. Nunca la mantiene en esta versión. Una actualización que pide permisos nuevos siempre te espera.",
+      "auto_update_follow": "Seguir el ajuste de actualizaciones ({{mode}})",
+      "auto_update_always": "Siempre",
+      "auto_update_never": "Nunca",
+      "auto_update_save_failed": "No se pudo guardar el ajuste de actualización de esta app."
     },
     "appPage": {
       "loading_app": "Cargando la app…",
@@ -23127,6 +23134,15 @@
         "row_label": "Silenciar las sesiones que abre {{app}}",
         "failed_to_save": "No se pudo guardar el silencio de {{app}}.",
         "config_load_failed": "No se pudieron cargar los silencios guardados de tus apps. Los interruptores no están disponibles hasta que se carguen."
+      },
+      "appUpdates": {
+        "title": "Actualizaciones de apps instaladas",
+        "mode_label": "Actualizar apps automáticamente",
+        "mode_hint": "Desactivado te avisa una vez cuando se publica una versión nueva de una app instalada. Automático comprueba cada 6 horas y la instala cuando la app está inactiva. Una actualización que pide permisos nuevos siempre te espera.",
+        "mode_off": "Desactivado",
+        "mode_on": "Automático",
+        "save_failed": "No se pudo guardar el ajuste de actualización de apps.",
+        "load_failed": "No se pudieron cargar los ajustes de actualización de apps."
       }
     },
     "settingsPage": {

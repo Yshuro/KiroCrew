@@ -26,6 +26,16 @@ export const SETTINGS_REGISTRY: SettingEntry[] =
     "label": "Release notes"
   },
   {
+    "id": "about.update-apps-automatically",
+    "label": "Update apps automatically",
+    "labelKey": "pages.settings.appUpdates.mode_label",
+    "hint": "Off tells you once when a new version of an installed app is published. Automatic checks every 6 hours and installs it once the app is idle. An update that asks for new permissions always waits for you.",
+    "tab": "about",
+    "type": "select",
+    "occurrence": 1,
+    "configKey": "app_updates.mode"
+  },
+  {
     "id": "about.update-channel",
     "labelKey": "pages.settings.aboutPanel.update_channel",
     "tab": "about",
