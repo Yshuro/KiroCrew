@@ -17,7 +17,7 @@ superseded-by: []
   [#24384](https://github.com/kirodotdev/KiroCrew/pull/24384): `session.idle_compaction`
   is read in `config/loader_builders.py` and the per-backend delay is
   `idle_compaction_delay_secs` in `agent_sdk/backends_turns.py`. Phase 2, the
-  Settings UI control, is not built: `website/src/` has no `idle_compaction` hit.
+  Settings control, is in flight in its implementation pull request.
 - Author: Pearcekieser, with Kiro
 - Created: 2026-10-19
 - Measured at: `cea787cbd5`

@@ -26,6 +26,9 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
   'chat.spell-check-message-input': ['spell check', 'spellcheck', 'spelling', 'red underline', 'squiggle', 'dictionary'],
   'chat.style-markdown-while-typing': ['markdown', 'bold', 'italic', 'strikethrough', 'inline code', 'formatting', 'live preview'],
   'chat.split-side-by-side-diffs': ['split', 'unified', 'split view', 'unified view', 'diff layout', 'side by side'],
+  // The idle compaction labels name the mechanism; these find them by what it does for the user.
+  'chat.compact-idle-chats-before-cache-expiry': ['idle compaction', 'summarize', 'save credits'],
+  'chat.idle-compaction-minimum-context': ['summarize', 'save credits'],
 
   // Agent Harness. fuzzyMatch is literal, so the spaced, hyphenated and joined
   // spellings of "log out" are separate entries.
