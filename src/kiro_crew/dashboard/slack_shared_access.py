@@ -30,6 +30,7 @@ from aiohttp import web
 
 from kiro_crew.config.sections_slack import is_slack_user_id, shared_user_ids
 from kiro_crew.dashboard.origin import is_direct_local_request
+from kiro_crew.http_proxy import SLACK_API_URL, resolve_proxy_off_loop, slack_web_client
 from kiro_crew.sel import sel
 from kiro_crew.slack import shared_access
 
@@ -69,10 +70,10 @@ async def _slack_identity() -> tuple[str, str]:
     return creds.get(CRED_SLACK_BOT_TOKEN, ""), creds.get(CRED_OWNER_ID, "")
 
 
-def _web_client(token: str) -> Any:
-    from slack_sdk.web.async_client import AsyncWebClient
-
-    return AsyncWebClient(token=token, timeout=10) if token else None
+async def _web_client(token: str) -> Any:
+    if not token:
+        return None
+    return slack_web_client(token, await resolve_proxy_off_loop(SLACK_API_URL), timeout=10)
 
 
 def _user_view(verdict: shared_access.Verdict) -> dict[str, Any]:
@@ -95,7 +96,7 @@ async def api_shared_access_get(request: web.Request) -> web.Response:
         return gate_refusal
     shared = _live_shared()
     token, owner_id = await _slack_identity()
-    client = _web_client(token)
+    client = await _web_client(token)
     gate = asyncio.Semaphore(_LOOKUP_CONCURRENCY)
 
     async def _one(user_id: str) -> dict[str, Any]:
@@ -252,7 +253,7 @@ async def api_shared_access_add(request: web.Request) -> web.Response:
         )
     token, owner_id = await _slack_identity()
     verdict = await shared_access.lookup(
-        _web_client(token), user_id, owner_id=owner_id, refresh=True
+        await _web_client(token), user_id, owner_id=owner_id, refresh=True
     )
     if not verdict.ok:
         return _deny(caller, op, f"Slack did not confirm {user_id}", code=verdict.reason)

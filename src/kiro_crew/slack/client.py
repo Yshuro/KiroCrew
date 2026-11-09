@@ -460,10 +460,19 @@ class RealSlackClient(SlackClientOps):
     #: default so instances built without ``__init__`` read it as off.
     agent_sessions: AgentSessionStatus | None = None
 
+    def use_proxy(self, proxy: str | None) -> None:
+        """Send every later Web API call through *proxy* (``None``: direct)."""
+        self._web.proxy = proxy
+
     def __init__(self, bot_token: str):
+        # The proxy is set through ``use_proxy`` by the async caller
+        # (``http_proxy.resolve_proxy_off_loop``): resolving here would read
+        # the OS bypass list on the event loop. Until then slack_sdk keeps its
+        # own environment default, as on main.
         self._web = AsyncWebClient(
             token=bot_token,
             retry_handlers=[_ConnectSetupRetryHandler(max_retry_count=_SLACK_CONNECT_RETRY_COUNT)],
+            proxy=None,
         )
         # Channel→workspace team_id cache. Populated ONLY from
         # conversations_info()'s home-workspace answer by

@@ -41,6 +41,8 @@ import websockets
 import websockets.uri
 from slack_sdk.socket_mode.websockets import SocketModeClient
 
+from kiro_crew.http_proxy import is_bypassed, system_proxies
+
 logger = logging.getLogger(__name__)
 
 # websockets 15 is the first release that detects a proxy, and the first whose
@@ -69,17 +71,20 @@ def _socks_supported() -> bool:
     return True
 
 
+def _ws_pick(proxies: dict[str, str], secure: bool) -> str | None:
+    """websockets 15's ``get_proxy`` precedence, over *proxies* (bypass already checked)."""
+    schemes = ["wss", "socks", "https"] if secure else ["ws", "socks", "https", "http"]
+    for scheme in schemes:
+        proxy = proxies.get(scheme)
+        if proxy is not None:
+            if scheme == "socks" and proxy.startswith("http://"):
+                proxy = "socks5h://" + proxy[7:]
+            return proxy
+    return None
+
+
 def _is_socks(proxy: str) -> bool:
     return urllib.parse.urlparse(proxy).scheme.lower().startswith("socks")
-
-
-def _bypassed(uri: str) -> bool:
-    parsed = urllib.parse.urlparse(uri)
-    host = parsed.hostname or ""
-    if not host:
-        return False
-    port = parsed.port or (443 if parsed.scheme == "wss" else 80)
-    return bool(urllib.request.proxy_bypass(host) or urllib.request.proxy_bypass(f"{host}:{port}"))
 
 
 def select_socket_mode_proxy(uri: str) -> str | None:
@@ -88,12 +93,18 @@ def select_socket_mode_proxy(uri: str) -> str | None:
     Raises :class:`SocksProxyUnavailable` when the only proxy configured for
     ``uri`` is a SOCKS one and ``python-socks`` is not installed.
     """
-    if _ws_get_proxy is None or _bypassed(uri):
+    if _ws_get_proxy is None or is_bypassed(uri):
         return None
-    proxy: str | None = _ws_get_proxy(websockets.uri.parse_uri(uri))
+    proxies = system_proxies()[0]
+    parsed = websockets.uri.parse_uri(uri)
+    if set(urllib.request.getproxies_environment()) == {"no"}:
+        # NO_PROXY alone: websockets reads getproxies(), which skips the OS
+        # proxy the Web API clients use, so apply its precedence to that map.
+        proxy = _ws_pick(proxies, parsed.secure)
+    else:
+        proxy = _ws_get_proxy(parsed)
     if proxy is None or not _is_socks(proxy) or _socks_supported():
         return proxy
-    proxies = urllib.request.getproxies()
     for scheme in ("https", "http"):
         candidate = proxies.get(scheme)
         if candidate and not _is_socks(candidate):

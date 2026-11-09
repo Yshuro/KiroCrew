@@ -58,6 +58,21 @@ class TestSelectSocketModeProxy:
         monkeypatch.setattr(smp, "_socks_supported", lambda: True)
         assert select_socket_mode_proxy(WSS) == "socks5h://127.0.0.1:7890"
 
+    def test_no_proxy_alone_uses_the_os_proxy_the_web_api_uses(
+        self, proxies, monkeypatch, no_python_socks
+    ):
+        # The stdlib's getproxies() returns {"no": ...} here and skips the OS.
+        import kiro_crew.http_proxy as http_proxy
+
+        proxies["no"] = "example.test"
+        monkeypatch.setattr(
+            urllib.request, "getproxies_environment", lambda: {"no": "example.test"}
+        )
+        monkeypatch.setattr(http_proxy, "_os_proxies", lambda: dict(MACOS_ALL_THREE))
+        monkeypatch.setattr(http_proxy, "_os_bypass", lambda: None)  # never the host's own list
+        assert select_socket_mode_proxy(WSS) == "http://127.0.0.1:7890"
+        assert http_proxy.resolve_proxy(http_proxy.SLACK_API_URL) == "http://127.0.0.1:7890"
+
     def test_socks_only_raises_an_actionable_error(self, proxies, no_python_socks):
         proxies["socks"] = "http://127.0.0.1:7890"
         with pytest.raises(SocksProxyUnavailable) as caught:

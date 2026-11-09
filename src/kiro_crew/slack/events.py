@@ -306,7 +306,9 @@ async def init_socket_mode(
         orch.slack = None
         return
 
-    web_client = AsyncWebClient(token=orch._bot_token)
+    from kiro_crew.http_proxy import SLACK_API_URL, resolve_proxy_off_loop, slack_web_client
+
+    web_client = slack_web_client(orch._bot_token, await resolve_proxy_off_loop(SLACK_API_URL))
     # slack.shared_access checks each listed id with this client (users.info).
     install_shared_access(web_client)
     orch._socket_client = WSSocketModeClient(
