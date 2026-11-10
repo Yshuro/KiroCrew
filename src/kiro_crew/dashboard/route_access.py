@@ -67,4 +67,16 @@ ROUTES: Final[dict[tuple[str, str], RouteAccess]] = {
     # Owner gate (crew_api_owner.owner_route); Crew API phase 1a, no preview marking.
     # Contract test: test_crew_api_models.py.
     ("GET", "/v1/models"): RouteAccess("crew_api.models.list", STABLE),
+    # Connected computers, this computer's own side (feature preview). Owner dashboard
+    # only (connected_computers/local_routes.py `_owner`); the action names are the
+    # handlers' own audit operation names.
+    ("GET", "/api/connected-computers/local/grants"): RouteAccess(
+        "connected_computers.grants.read", UNSTABLE
+    ),
+    ("DELETE", "/api/connected-computers/local/grants/{grant_id}"): RouteAccess(
+        "connected_computers.revoke", UNSTABLE
+    ),
+    ("POST", "/api/connected-computers/local/off"): RouteAccess(
+        "connected_computers.off", UNSTABLE
+    ),
 }
