@@ -211,7 +211,7 @@ _NEW_OWNER_DEFS: dict[str, tuple[str, ...]] = {
         gate_tier_problems
         """.split()),
     "safe_reads": ("screen_windows_linked_ancestors",),
-    "script_hooks": ("_script_hook_enabled_from",),
+    "script_hooks": ("_script_hook_enabled_from", "_hook_path"),
     "tool_identity": ("ToolCall",),
     "hook_dispatch": ("hook_tool_input",),
 }
@@ -252,7 +252,9 @@ _NEW_OWNER_DEFS: dict[str, tuple[str, ...]] = {
 #: ``safe_file_identity`` takes a keyword-only ``hold=None`` (an ``ExitStack`` that
 #: keeps the sampled descriptor open, so a replaced inode's number cannot be
 #: reused before the next sample), so its callers fit too.
-_BASE_SHAPE_DIGEST = "2f457c7b64470c2221cb447d314c0bbd7b73e607b9f47352b95409c24ff1678d"
+#: ``_hook_subprocess_env`` takes a keyword-only ``path=None`` (a PATH
+#: ``run_script_hook`` builds off the loop with ``_hook_path``), so its callers fit too.
+_BASE_SHAPE_DIGEST = "6f2d7c7e58d4bd1addaf0f711dd3513ba03e668b1c0ba70fdf7d518511b1e6d5"
 
 #: Definitions that stay in the facade file, each because a guard, a contract or the
 #: ``compose`` ordering reads it there. The reason per entry is in

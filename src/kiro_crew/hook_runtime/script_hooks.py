@@ -94,11 +94,39 @@ def _script_hook_enabled_from(data: dict) -> bool:
     return True
 
 
+def _hook_path(inherited: str | None) -> str:
+    """The PATH a hook runs with: ``inherited`` plus the user tool dirs.
+
+    Probes the filesystem, so ``run_script_hook`` calls it off the event loop.
+    It reads no ``os.environ`` mapping itself beyond what ``augmented_path``
+    looks up by key.
+    """
+    from kiro_crew.env import augmented_path, dedup_path
+
+    # The user tool dirs the kiro-cli and MCP spawns get (~/.local/bin,
+    # Homebrew, ...), so a hook finds its CLI under a desktop-app or service
+    # gateway's bare PATH. They go AFTER the inherited PATH, not ahead of it: a
+    # user-writable dir must not shadow a system binary a guard hook calls by
+    # name. An unset PATH falls back to os.defpath's absolute entries (Windows'
+    # lists "." first, which would let the cwd shadow a command). A set but
+    # empty PATH is kept: the shell reads it as the cwd, as the hook got before.
+    if inherited is None:
+        inherited = os.pathsep.join(d for d in os.defpath.split(os.pathsep) if os.path.isabs(d))
+    # The inherited value is kept verbatim (an empty entry still means the cwd);
+    # only the appended dirs are deduplicated against it.
+    added = dedup_path(inherited + os.pathsep + augmented_path(""))
+    seen = set(dedup_path(inherited).split(os.pathsep))
+    extra = [d for d in added.split(os.pathsep) if d and d not in seen]
+    return os.pathsep.join([inherited, *extra])
+
+
 def _hook_subprocess_env(
     hook: "ScriptHook",
     context: str,
     acp_session_id: str | None = None,
     session_model: str | None = None,
+    *,
+    path: str | None = None,
 ) -> dict[str, str]:
     """Build the environment a script-hook subprocess runs with.
 
@@ -127,8 +155,15 @@ def _hook_subprocess_env(
     ``session_model`` is the model the firing session runs on, set as
     ``KIROCREW_SESSION_MODEL``. kiro-cli has no such variable, so the name is
     Kiro Crew's. Unknown, it stays unset.
+
+    ``path`` is a PATH already built by :func:`_hook_path`; ``None`` builds it
+    here. ``run_script_hook`` builds it in a worker thread and passes it in, so
+    the ``os.environ`` snapshot stays on the event loop, where the config
+    watcher mutates ``os.environ``: iterating it from a thread while that
+    happens raises ``KeyError``.
     """
     env = {k: v for k, v in os.environ.items() if k in _HOOK_BASE_ENV_KEYS}
+    env["PATH"] = _hook_path(env.get("PATH")) if path is None else path
     env["KIROCREW_HOOK_EVENT"] = hook.event
     env["KIROCREW_HOOK_CONTEXT"] = context[:500]
     if acp_session_id:
@@ -341,7 +376,10 @@ async def run_script_hook(
         # (``_HOOK_BASE_ENV_KEYS``) plus the hook-metadata variables — NOT a
         # copy of the whole gateway environment, which would expose the gateway's
         # AWS/model/OAuth/connection-string credentials to every hook command.
-        env = _hook_subprocess_env(hook, context, acp_session_id, session_model)
+        # The PATH augmentation probes the filesystem, so it runs off the loop;
+        # the os.environ snapshot stays on it (see ``_hook_subprocess_env``).
+        path = await asyncio.to_thread(_hook_path, os.environ.get("PATH"))
+        env = _hook_subprocess_env(hook, context, acp_session_id, session_model, path=path)
         # Shell per platform: POSIX /bin/sh -c, Windows cmd /c (no /bin/sh there).
         # The argv is what the sandbox/cgroup chokepoints below vet, on BOTH
         # platforms — only the eventual spawn form differs (see the Windows

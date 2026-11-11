@@ -199,6 +199,7 @@ from kiro_crew.hook_runtime.safe_reads import (  # noqa: F401
 from kiro_crew.hook_runtime.script_hooks import (  # noqa: F401
     ScriptHookResult,
     ScriptHookStore,
+    _hook_path,
     _hook_subprocess_env,
     _script_hook_enabled_from,
     run_script_hook,
