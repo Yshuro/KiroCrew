@@ -1864,3 +1864,25 @@ def _published_redaction_verdict_on():
     seams = sys.modules.get("kiro_crew.redaction_seams")
     if seams is not None:
         seams.publish(False)
+
+
+@per_test_guard
+def _forget_unpersisted_quarantine_marks():
+    """Start and end each test with no quarantine mark held in memory only.
+
+    ``agent_scratch_trees._QUARANTINE_LIVE`` keeps a mark the tree index refused,
+    keyed by the directory's basename, for the life of the process. Tests reuse
+    those names under fresh scratch roots, so a mark one test held would refuse an
+    unmarked directory in the next.
+    """
+
+    def clear():
+        module = sys.modules.get("kiro_crew.agent_scratch_trees")
+        if module is not None:
+            module._QUARANTINE_LIVE.clear()
+
+    clear()
+    try:
+        yield
+    finally:
+        clear()
