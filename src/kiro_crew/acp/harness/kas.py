@@ -1311,6 +1311,30 @@ class KasHarness(MembershipHarness):
         handle.kas_bundle_engine_version = self.bundle_engine_version
         handle.kas_untested_version_notice = self.untested_version_notice
         handle.kas_engine_fallback_notice = self.engine_fallback_notice
+        # Migrate the app-snapshot written by record_mounted from the conversation
+        # key to the native KAS session id.  This must happen here — after session/new
+        # returns and the handle (with its native session_id) is available — so
+        # note_unconfirmed_close can find the snapshot under the native id even when a
+        # swap_conversation has reused the same conversation key for a new session.
+        # A handle with no native id binds nothing: the snapshot stays under the
+        # conversation key, where note_unconfirmed_close also looks.
+        session_key: str = getattr(handle, "_session_key", "") or ""
+        native_sid = getattr(handle, "session_id", None)
+        if session_key and native_sid:
+            try:
+                from kiro_crew.bot_chat_app_tools import bind_snapshot_to_native_sid
+
+                bind_snapshot_to_native_sid(
+                    session_key, native_sid, getattr(handle, "_runtime", None)
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug(
+                    "KasHarness.record_session_projection: bind_snapshot_to_native_sid failed "
+                    "for %s / %s",
+                    session_key,
+                    native_sid,
+                    exc_info=True,
+                )
 
     async def session_extras(
         self,
@@ -1604,7 +1628,13 @@ class KasHarness(MembershipHarness):
                     own["mcpServers"] = mcp_servers
                     if custom_agents:
                         custom_agents = [own, *custom_agents[1:]]
-                voided_apps = record_mounted(session_key, mounted_names(mcp_servers))
+                # The projection may carry an alias as offered or whitespace-folded.
+                names = set(mounted_names(mcp_servers))
+
+                def spelled(a: str) -> str:
+                    return a if a in names else _cn(a)
+
+                voided_apps = record_mounted(session_key, mounted_names(mcp_servers), spelled)
                 if voided_apps:
                     mcp_servers = {
                         a: e
