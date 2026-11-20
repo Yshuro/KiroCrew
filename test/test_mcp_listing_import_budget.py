@@ -95,11 +95,15 @@ FORBIDDEN_BEFORE_THE_LIST = (
 #: floor), ``argv_floor_tar`` (the line-cap split of its tar grammar) and
 #: ``argv_floor_ssh_operand`` (the line-cap split of the ssh operand reader). The security
 #: package loads before the list, so the owners cannot move behind it; nothing else loads.
+#: Raised by 1 for ``mcp-core`` and ``mcp-mate`` by the ssh-to-self descent: the
+#: empty-quote collapse lives in ``shell_normalizer_quote_pairs``, the line-cap split of
+#: ``shell_normalizer``, which the security package loads before the list; the module
+#: count rose by that one file and nothing else loads (cron and guide had the headroom).
 PACKAGE_MODULE_CEILING = {
-    "mcp-core": 496,
+    "mcp-core": 497,
     "mcp-cron": 364,
     "mcp-guide": 358,
-    "mcp-mate": 359,
+    "mcp-mate": 360,
 }
 
 #: The modules that read the two live values in the spawn tools' descriptions. They are
