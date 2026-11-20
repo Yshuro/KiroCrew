@@ -85,6 +85,7 @@ async def prepare_connected_session(
         session_key=session_key,
         exposed_mcp=conn.mcp,
         broker=brk,
+        platform=conn.platform,
     )
     return PreparedRemoteSession(
         launch,  # type: ignore[arg-type]  # a duck-typed launch: see launch.py
