@@ -74,6 +74,16 @@ def test_no_session_manager_ancestor_is_not_ssm(monkeypatch: pytest.MonkeyPatch)
     assert shell_origin.is_ssm_session() is False
 
 
+def test_the_walk_stops_at_pid_1_and_never_reads_its_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # init (pid 1) is never a Session Manager worker; the walk stops before it.
+    _process_table(
+        monkeypatch, {500: ("python3", 400), 400: ("bash", 1), 1: ("ssm-session-wor", 0)}
+    )
+    assert shell_origin.is_ssm_session() is False
+
+
 def test_a_cyclic_process_table_stops_at_the_depth_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     _process_table(monkeypatch, {500: ("python3", 400), 400: ("bash", 500)})
     walked: list[int] = []
