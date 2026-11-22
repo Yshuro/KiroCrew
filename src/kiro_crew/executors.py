@@ -60,6 +60,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from typing import Any, Awaitable, Callable, TypeVar
 
+from kiro_crew.enqueue_only_pool import EnqueueOnlyThreadPoolExecutor
 from kiro_crew.subprocess_pool import SubprocessPoolExecutor
 
 logger = logging.getLogger(__name__)
@@ -413,12 +414,15 @@ def configure_default_executor() -> None:
     * Keeps Python's default cap (``min(32, cpu_count + 4)``).
     * Names threads ``mc-default`` so they appear labeled in profilers like
       py-spy, instead of the anonymous ``ThreadPoolExecutor-N_M``.
+    * Its ``submit`` only enqueues (:class:`EnqueueOnlyThreadPoolExecutor`), so
+      an ``asyncio.to_thread`` on the loop never waits while another thread
+      starts a pool worker.
 
     It does NOT keep the default executor free for the loop's own I/O: most
     blocking call sites still route onto it.
     """
     loop = asyncio.get_running_loop()
-    pool = ThreadPoolExecutor(
+    pool = EnqueueOnlyThreadPoolExecutor(
         max_workers=None,  # keep Python's default: min(32, cpu_count + 4)
         thread_name_prefix="mc-default",
     )
