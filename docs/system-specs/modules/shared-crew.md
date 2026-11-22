@@ -683,7 +683,18 @@ Crew: `routes_invites._owner_refusal` admits only the local operator or this
 machine's own tailnet user, so a teammate cannot list, create or revoke invites, read
 the access card or switch the preview; the mobile setup (`tailnet_mobile`, whose QR
 hands back a credential in the owner's own name) asks
-`is_host_owner_dashboard_request`; turning Remote Control off (`PUT
+`is_host_owner_dashboard_request`; so do the managed-environment routes
+(`/api/managed-environments/*`, `managed_env.routes.host_owner`, and the generic
+`/api/cloud/*` launch, sign-in (skip included), task, stop, start and delete routes for a
+`kiro_managed_env` job, `handlers_cloud._lane_owner_refusal`, and the
+`/api/instances/*` routes that reach a managed environment's Remote Crew row (one
+stamped `kiro_managed_env`, one dialling a `crew-sbx-<id>` alias, or one chained
+through either): connect, remove, edit, refresh-token, embed-token, disconnect,
+restart, remote update, send-session, capabilities, approval-state, chat-slots, proxy
+and crew-turn, plus an add that would write such a row,
+`handlers_instances_gate._managed_env_refusal`), since a session is
+a root shell on the owner's environment and stop or delete act on the owner's account,
+and a teammate gets 403 `owner_only`; turning Remote Control off (`PUT
 /api/remote-control`, `REMOTE_ACCESS_WRITES`) refuses a teammate, since only the host
 machine can turn it back on and a teammate would shut every person out (the handler
 refuses the owner too on a relayed request, 403 `relay_remote_control_refused`, for

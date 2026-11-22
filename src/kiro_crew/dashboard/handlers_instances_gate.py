@@ -23,6 +23,7 @@ from kiro_crew.instances.registry import (
     MAX_CHAINED_PER_PARENT,
     MAX_VIA_HOPS,
     InstancesRegistry,
+    RegistryUnreadableError,
     ancestor_ids,
 )
 from kiro_crew.loop_lock import LoopBoundLock
@@ -156,6 +157,61 @@ def _guard(request: web.Request, operation: str) -> web.Response | None:
             status=403,
         )
     return None
+
+
+def _reaches_managed_env(inst) -> bool:
+    """Whether a row is a Kiro managed environment: the lane stamped it, or it dials
+    the lane's ``crew-sbx-<id>`` ssh alias."""
+    from kiro_crew.managed_env import PROVISIONER_ID
+    from kiro_crew.managed_env.remote import sandbox_id_from_host
+
+    return inst.provisioner_id == PROVISIONER_ID or bool(sandbox_id_from_host(inst.ssh_host))
+
+
+async def _managed_env_refusal(
+    request: web.Request, operation: str, *, instance_id: str | None = None, ssh_host: str = ""
+) -> web.Response | None:
+    """403 ``owner_only`` for a Shared Crew teammate acting on a managed environment.
+
+    ``_guard`` admits a teammate, but a managed environment is the machine owner's
+    alone, as on the lane's own routes: a tunnel to it is a shell on the owner's
+    environment. The row is *instance_id* (the route's ``{id}`` by default) and every
+    crew it is chained through; *ssh_host* is a host the request would write. Rows of
+    other provisioners answer None. Only a caller ``_guard`` admitted as a teammate is
+    checked, so the machine owner pays no registry read on the proxy's every request. With
+    the ``crew_client`` preview off the check answers None, since the lane's ssh-session
+    route then answers 404 and no tunnel to an environment can open. An unreadable
+    registry answers None: the route's own read then answers as it does without this
+    check."""
+    from kiro_crew.managed_env.remote import sandbox_id_from_host
+    from kiro_crew.shared_crew.teammate_access import teammate_passes_owner_gate
+
+    if not teammate_passes_owner_gate(request):  # never the machine owner
+        return None
+    from kiro_crew.managed_env.settings import lane_enabled
+
+    if not lane_enabled():  # preview off: no lane route answers, so routes behave as on main
+        return None
+    if instance_id is None:
+        instance_id = request.match_info.get("id", "")
+    hit = bool(sandbox_id_from_host(ssh_host))
+    if not hit and instance_id:
+        try:
+            instances = await asyncio.to_thread(_registry(request.app["state"]).list)
+        except RegistryUnreadableError:
+            return None
+        chain = {instance_id, *ancestor_ids(instances, instance_id)}
+        hit = any(_reaches_managed_env(i) for i in instances if i.id in chain)
+    if not hit:
+        return None
+    from kiro_crew.managed_env.routes import host_owner
+
+    if host_owner(request, f"instances_{operation}"):
+        return None
+    _audit(operation, "denied", request_id=instance_id, error="managed environment: owner only")
+    return web.json_response(
+        {"error": "Only this Crew's owner can do this.", "code": "owner_only"}, status=403
+    )
 
 
 #: The one answer every route gives when the feature is enabled but no tunnel

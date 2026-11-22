@@ -33,6 +33,7 @@ from kiro_crew.dashboard.handlers_instances_gate import (
     MANAGER_UNAVAILABLE_MESSAGE,
     _audit,
     _guard,
+    _managed_env_refusal,
     _manager_unavailable_response,
     _registry,
 )
@@ -337,6 +338,8 @@ async def api_instances_capabilities(request: web.Request) -> web.Response:
     if not is_owner_dashboard_request(request):
         _audit("capabilities", "denied", error="non-owner identity rejected")
         return _owner_denial_response(request, "remote-crew capabilities are owner-only")
+    if (refused := await _managed_env_refusal(request, "capabilities")) is not None:
+        return refused
     state: DashboardState = request.app["state"]
     instance_id = request.match_info.get("id", "")
     mgr = getattr(state, "instances_manager", None)
@@ -471,6 +474,8 @@ async def api_instances_approval_state(request: web.Request) -> web.Response:
     if not is_owner_dashboard_request(request):
         _audit("approval_state", "denied", error="non-owner identity rejected")
         return _owner_denial_response(request, "remote-crew approval state is owner-only")
+    if (refused := await _managed_env_refusal(request, "approval_state")) is not None:
+        return refused
     state: DashboardState = request.app["state"]
     instance_id = request.match_info.get("id", "")
     mgr = getattr(state, "instances_manager", None)
@@ -919,6 +924,8 @@ async def api_instances_chat_slots(request: web.Request) -> web.Response:
     if not is_owner_dashboard_request(request):
         _audit("chat_slots", "denied", error="non-owner identity rejected")
         return _owner_denial_response(request, "remote-crew session list is owner-only")
+    if (refused := await _managed_env_refusal(request, "chat_slots")) is not None:
+        return refused
     state: DashboardState = request.app["state"]
     instance_id = request.match_info.get("id", "")
     # An id naming no registered crew is the caller's mistake, not a peer that is
@@ -1061,6 +1068,8 @@ async def api_instances_proxy(request: web.Request) -> web.StreamResponse:
         # Deny decision made above; only the response label changes for a signed
         # pre-owner bootstrap subject (see stale_owner_session_response).
         return _owner_denial_response(request, "remote-crew proxy is owner-only")
+    if (refused := await _managed_env_refusal(request, "proxy")) is not None:
+        return refused
     state: DashboardState = request.app["state"]
     instance_id = request.match_info["id"]
     path = request.match_info.get("path", "")

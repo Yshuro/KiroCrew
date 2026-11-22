@@ -355,6 +355,7 @@ from conftest_resets import (  # noqa: E402,F401 -- bound for pytest and importe
     _reset_env_boot_record_and_ownership,
     _reset_kas_machine_fence_config,
     _reset_live_execution_records,
+    _reset_managed_env_shared_client,
     _reset_materialized_agents_snapshot,
     _reset_persisted_truncation_reports,
     _reset_resource_subscription_state,

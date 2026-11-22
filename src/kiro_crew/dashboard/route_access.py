@@ -64,6 +64,23 @@ ROUTES: Final[dict[tuple[str, str], RouteAccess]] = {
     ("POST", "/api/chat/slots/{slot}/approve-for-me"): RouteAccess(
         "chat.approve_for_me.change", UNSTABLE
     ),
+    # Managed-environment lane (managed_env/routes.py): owner dashboard on the host only,
+    # 403 for a teammate, 404 while the crew_client preview is off. The list drops rows
+    # for environments missing from the service's List answer, so it is not a `.read`.
+    ("GET", "/api/managed-environments/list"): RouteAccess("managed_environments.list", UNSTABLE),
+    ("GET", "/api/managed-environments/ssh-config"): RouteAccess(
+        "managed_environments.ssh_config.read", UNSTABLE
+    ),
+    ("POST", "/api/managed-environments/ssh-config"): RouteAccess(
+        "managed_environments.ssh_config.write", UNSTABLE
+    ),
+    ("POST", "/api/managed-environments/{sandbox_id}/ssh-session"): RouteAccess(
+        "managed_environments.ssh_session.start", UNSTABLE
+    ),
+    # Stop, resume or delete one environment this Crew made.
+    ("POST", "/api/managed-environments/{sandbox_id}/{action}"): RouteAccess(
+        "managed_environments.change", UNSTABLE
+    ),
     # Owner gate (crew_api_owner.owner_route); Crew API phase 1a, no preview marking.
     # Contract test: test_crew_api_models.py.
     ("GET", "/v1/models"): RouteAccess("crew_api.models.list", STABLE),

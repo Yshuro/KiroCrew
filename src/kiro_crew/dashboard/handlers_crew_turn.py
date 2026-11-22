@@ -470,7 +470,7 @@ async def api_crew_turn(request: web.Request) -> web.StreamResponse:
     """
     from kiro_crew.dashboard.handlers._shared import _owner_denial_response
     from kiro_crew.dashboard.handlers.source_providers import is_owner_dashboard_request
-    from kiro_crew.dashboard.handlers_instances import _guard
+    from kiro_crew.dashboard.handlers_instances import _guard, _managed_env_refusal
     from kiro_crew.shared_crew.admission import OperationKind, ReasonCode, error_body, http_status
     from kiro_crew.shared_crew.admission_gate import (
         TASK_STORE_UNAVAILABLE_CODE,
@@ -489,6 +489,8 @@ async def api_crew_turn(request: web.Request) -> web.StreamResponse:
     if not is_owner_dashboard_request(request):
         _audit(_AUDIT_OP, "denied", error="non-owner identity rejected")
         return _owner_denial_response(request, "remote-crew chat is owner-only")
+    if (refused := await _managed_env_refusal(request, _AUDIT_OP)) is not None:
+        return refused
 
     refusal: list[ReasonCode | str | None] = []
     response = await run_admitted(

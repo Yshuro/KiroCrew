@@ -55,6 +55,7 @@ from kiro_crew.dashboard.handlers_instances_gate import (
     _guard,
     _instance_view,
     _is_correlated_cloud_instance,
+    _managed_env_refusal,
     _manager_unavailable_response,
     _moves_the_tunnel,
     _registry,
@@ -219,6 +220,11 @@ async def api_instances_add(request: web.Request) -> web.Response:
         )
     via_instance_id = str(body.get("via_instance_id", ""))
     via_remote_id = str(body.get("via_remote_id", ""))
+    refused = await _managed_env_refusal(
+        request, "add", instance_id=via_instance_id, ssh_host=str(body.get("ssh_host", ""))
+    )
+    if refused is not None:
+        return refused
     # One critical section from the parent check to the insert. Validating and
     # then writing in two awaits lets a removal of that parent land between them:
     # its subtree snapshot predates this row, so the cascade never sees it and the
@@ -348,6 +354,9 @@ async def api_instances_update(request: web.Request) -> web.Response:
     if bad is not None:
         _audit("update", "denied", request_id=instance_id, error=bad)
         return web.json_response({"error": bad, "code": "instance_invalid"}, status=400)
+    host = changes.get("ssh_host", "")
+    if (refused := await _managed_env_refusal(request, "update", ssh_host=host)) is not None:
+        return refused
     current = await asyncio.to_thread(reg.get, instance_id)
     if current is None:
         _audit("update", "denied", request_id=instance_id, error="not found")
@@ -537,7 +546,7 @@ async def api_instances_remove(request: web.Request) -> web.Response:
     to stop is logged as a warning instead of raising a 500 over rows that are
     already gone.
     """
-    denied = _guard(request, "remove")
+    denied = _guard(request, "remove") or await _managed_env_refusal(request, "remove")
     if denied is not None:
         return denied
     state: DashboardState = request.app["state"]
@@ -671,7 +680,7 @@ async def api_instances_connect(request: web.Request) -> web.Response:
     On success returns the live status plus the minted ``token`` (the only
     place a token crosses this boundary; never logged, never in list/status).
     """
-    denied = _guard(request, "connect")
+    denied = _guard(request, "connect") or await _managed_env_refusal(request, "connect")
     if denied is not None:
         return denied
     state: DashboardState = request.app["state"]
@@ -864,7 +873,9 @@ async def api_instances_refresh_token(request: web.Request) -> web.Response:
     session. Like ``connect``, this is the only other place a token crosses this
     boundary; it is never logged and never appears in list/status.
     """
-    denied = _guard(request, "refresh_token")
+    denied = _guard(request, "refresh_token") or await _managed_env_refusal(
+        request, "refresh_token"
+    )
     if denied is not None:
         return denied
     state: DashboardState = request.app["state"]
@@ -911,7 +922,7 @@ async def api_instances_embed_token(request: web.Request) -> web.Response:
     forward on another number (the desktop app's managed tunnel), whose pane rides
     no hop past ours, so such a crew is minted by our parent for that port.
     """
-    denied = _guard(request, "embed_token")
+    denied = _guard(request, "embed_token") or await _managed_env_refusal(request, "embed_token")
     if denied is not None:
         return denied
     state: DashboardState = request.app["state"]
@@ -966,7 +977,7 @@ async def api_instances_embed_token(request: web.Request) -> web.Response:
 
 async def api_instances_disconnect(request: web.Request) -> web.Response:
     """POST /api/instances/{id}/disconnect — tear down one tunnel."""
-    denied = _guard(request, "disconnect")
+    denied = _guard(request, "disconnect") or await _managed_env_refusal(request, "disconnect")
     if denied is not None:
         return denied
     state: DashboardState = request.app["state"]
@@ -993,7 +1004,7 @@ async def api_instances_restart(request: web.Request) -> web.Response:
     """POST /api/instances/{id}/restart — restart the remote gateway over SSH, once idle.
 
     A busy or too-old crew is refused 409 (``busy``, ``peer_cannot_wait``); ``force`` skips it."""
-    denied = _guard(request, "restart")
+    denied = _guard(request, "restart") or await _managed_env_refusal(request, "restart")
     if denied is not None:
         return denied
     state: DashboardState = request.app["state"]
@@ -1069,7 +1080,9 @@ async def api_instances_update_remote(request: web.Request) -> web.Response:
     ``202 {ok, job}`` at once; poll ``GET`` on the same path for progress.
     One click starts one job: a second POST while one runs is refused 409.
     """
-    denied = _guard(request, "update_remote")
+    denied = _guard(request, "update_remote") or await _managed_env_refusal(
+        request, "update_remote"
+    )
     if denied is not None:
         return denied
     denied = _update_owner_denial(request, "update_remote")
@@ -1333,7 +1346,7 @@ async def api_instances_send_session(request: web.Request) -> web.Response:
     and ``refresh-token`` stay the only two routes where a token crosses this
     boundary (see the module docstring and instances.md §6).
     """
-    denied = _guard(request, "send_session")
+    denied = _guard(request, "send_session") or await _managed_env_refusal(request, "send_session")
     if denied is not None:
         return denied
     state: DashboardState = request.app["state"]

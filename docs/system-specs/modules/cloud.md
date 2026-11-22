@@ -67,6 +67,12 @@ claim that a hostile in-process agent is fully contained.
 
 ## Module map
 
+For the managed-environment lane (`kiro_managed_env`) with an instances manager,
+dashboard Delete disconnects the job's registered crew and its descendants deepest-first under the chain-mutation
+lock before engine teardown or unregistering; a failed disconnect returns 409
+`remove_teardown_failed` without deleting resources or recovery rows. Other
+non-EC2 lanes delete as before.
+
 | Module | Role |
 |--------|------|
 | `aws.py` | The `run_aws` chokepoint for captured AWS CLI calls — fixed argv, no shell, sandbox-wrapped, `--profile` only (never boto3, never a raw key), and a child environment without the gateway's Python interpreter settings (`sandbox.without_python_env`), because aws-cli v1 is a Python program. `checked`/`checked_json`; `AccessDenied → exact IAM action` mapping; `env_credentials_hint()`; `configured_region(profile)`, the profile's own Region from the AWS config file (`aws configure get region`, "" when unset or in an agent session), which `cloud doctor` compares with the default Region it checks; `warn_if_started_from_agent_session()`, the gateway's log-only post-READY WARNING when its own process reads as an agent session (`_in_agent_session`, the check `assert_human_action` refuses on), e.g. restarted from an agent's shell. |
