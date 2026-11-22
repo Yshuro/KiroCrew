@@ -141,6 +141,27 @@ def _guard(
     return None
 
 
+#: Lanes whose cloud routes are the machine owner's alone, as their own routes are: a
+#: Shared Crew teammate who passes the owner gate above is refused (403 ``owner_only``).
+#: The built-in EC2 lane is not listed and keeps the owner gate alone.
+_HOST_OWNER_ONLY_LANES = ("kiro_managed_env",)
+
+
+def _lane_owner_refusal(
+    request: web.Request, provider_id: str, operation: str
+) -> Optional[web.Response]:
+    """A refusal for a teammate on a host-owner-only lane, or None."""
+    if provider_id not in _HOST_OWNER_ONLY_LANES:
+        return None
+    from kiro_crew.managed_env.routes import host_owner
+
+    if host_owner(request, f"cloud_{operation}"):
+        return None
+    return web.json_response(
+        {"error": "Only this Crew's owner can do this.", "code": "owner_only"}, status=403
+    )
+
+
 def _store(state: "DashboardState") -> lj.LaunchJobStore:
     """The store object only — constructing it touches no disk."""
     store = getattr(state, "cloud_launch_store", None)
@@ -648,6 +669,8 @@ async def api_cloud_launch_task(request: web.Request) -> web.Response:
     job = await _in_executor(store.get, request.match_info["id"])
     if job is None:
         return web.json_response({"error": "not found", "code": "launch_job_not_found"}, status=404)
+    if (refused := _lane_owner_refusal(request, job.provider_id, "launch_task")) is not None:
+        return refused
     if not job.instance_id:
         _audit("launch_task", "denied", request_id=job.id, error="no task recorded")
         return web.json_response(
@@ -792,6 +815,8 @@ async def api_cloud_launch_create(request: web.Request) -> web.Response:
     if refused is not None:
         return refused
     provisioner = next((p for p in await _in_executor(_provisioners) if p.id == provider_id), None)
+    if (refused := _lane_owner_refusal(request, provider_id, "launch_create")) is not None:
+        return refused
     if provisioner is None:
         _audit("launch_create", "denied", error=f"unknown provisioner {provider_id!r}")
         return web.json_response(
@@ -966,6 +991,8 @@ async def api_cloud_launch_cancel(request: web.Request) -> web.Response:
     job = await _in_executor(store.get, job_id)
     if job is None:
         return web.json_response({"error": "not found", "code": "launch_job_not_found"}, status=404)
+    if (refused := _lane_owner_refusal(request, job.provider_id, "launch_cancel")) is not None:
+        return refused
     # Under the launch lock: the restart route registers its cancel event and
     # persists RUNNING under this same lock, so a cancel cannot slip between those
     # two writes, find no event, and terminalize a job whose worker is about to
@@ -1104,6 +1131,8 @@ async def api_cloud_launch_signin(request: web.Request) -> web.Response:
     job = await _in_executor(store.get, request.match_info["id"])
     if job is None:
         return web.json_response({"error": "not found", "code": "launch_job_not_found"}, status=404)
+    if (refused := _lane_owner_refusal(request, job.provider_id, "launch_signin")) is not None:
+        return refused
     if job.status != lj.AWAITING_SIGNIN or not job.signin:
         if _unsigned_crew_may_be_reprobed(job):
             # Query off the loop, write on it under the lock. Both halves must
@@ -1262,6 +1291,10 @@ async def api_cloud_launch_signin_restart(request: web.Request) -> web.Response:
             return web.json_response(
                 {"error": "not found", "code": "launch_job_not_found"}, status=404
             )
+        if (
+            refused := _lane_owner_refusal(request, job.provider_id, "launch_signin_restart")
+        ) is not None:
+            return refused
         if job.signin_detected:
             # A stale tab asking to restart a sign-in that another tab (or the
             # re-probe) has since confirmed. Admitting it would clear
@@ -1490,6 +1523,8 @@ async def _mutate_instance(request: web.Request, op: str) -> web.Response:
     # credentials could not describe a stack that was never meant to exist -- a
     # report that reads as a broken profile rather than a verb that does not apply.
     lane = _lane_of(jobs, tag)
+    if (refused := _lane_owner_refusal(request, lane, op)) is not None:
+        return refused
     if lane != BUILTIN_PROVISIONER_ID and op in ("stop", "start"):
         # These two are the EC2 lane's reversible pair: stop parks an instance and
         # keeps its disk, start brings the same disk back. A lane whose engine offers
