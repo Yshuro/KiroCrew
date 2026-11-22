@@ -95,8 +95,11 @@ FORBIDDEN_BEFORE_THE_LIST = (
 #: floor), ``argv_floor_tar`` (the line-cap split of its tar grammar) and
 #: ``argv_floor_ssh_operand`` (the line-cap split of the ssh operand reader). The security
 #: package loads before the list, so the owners cannot move behind it; nothing else loads.
+#: Raised by 1 for ``mcp-core`` (496 to 497): the App Store search's declaration lives in
+#: its own ``kiro_crew.mcp_tools.catalog.app_store``, which the core listing loads from
+#: ``mcp_tools.DOMAIN_MODULES`` like every other domain.
 PACKAGE_MODULE_CEILING = {
-    "mcp-core": 496,
+    "mcp-core": 497,
     "mcp-cron": 364,
     "mcp-guide": 358,
     "mcp-mate": 359,
