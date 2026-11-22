@@ -1117,7 +1117,8 @@ Two mechanisms make "the split changed nothing for a caller" a tested claim rath
     `python3 - <<'EOF'` with `n = a * localhost` in the body is not read as a glob
     verb naming ssh and its target. The view is read on the words as written and
     only then lowered, because bash matches a closing line case-sensitively; when
-    the words as written are not at hand, the view is not taken. The view is also
+    the words as written are not at hand, or the text is not the submitted line
+    itself (a substitution body), the view is not taken. The view is also
     skipped, and the whole line read as before, when the text holds a `\r` (the view drops one from a tag but not from
     the closing line, where bash keeps it) or a line holding `<<` ends in a backslash
     (bash joins it to the next line; the view does not). Both guards only turn the
@@ -1133,15 +1134,25 @@ Two mechanisms make "the split changed nothing for a caller" a tested claim rath
     reads them with, so the two never disagree about which bodies bash runs. Bodies
     are judged one level at a time: a deeper body
     the splice cannot resolve is replaced by one word and judged on its own turn, so
-    the work grows linearly with nesting depth. This reading only adds refusals. An
+    the work grows linearly with nesting depth. A body is judged with its words as
+    written where they read to the same spans and bodies, so it gets the line's own
+    cased reading of a wrapper's options (`sudo -H` takes no value, `sudo -h` does,
+    `sudo -e` runs no program), but not the here-document data view, which only the
+    submitted line gets. A shell payload's bodies, and a body whose written words
+    read otherwise, are judged lowered. The body reading only adds refusals to
+    the line's own verdict. An
     escaped backtick span (`` echo \`echo hi; ssh … id\` ``) is data on its own line,
     so `_is_ssh_to_self` leaves it unspliced there. One quoting level down it runs
     (`eval "ssh -p 22 \`printf localhost\`"`); the `_MAIN_READING` pass of
     `_reaches_self_over_ssh` splices such a span, as main's splice did, and refuses it.
     Known residuals fail closed: a body is refused when the floor already refuses it as a
     plain line, though bash runs no ssh, for a glued `;echo`, a `#` comment, the text
-    a `cat` prints from an unquoted-tag heredoc, and an escaped `\;`
-    (`test_known_fail_closed_residuals_are_refused`).
+    a `cat` prints from an unquoted-tag heredoc, and an escaped `\;`; and the ssh
+    floor's payload readers take a `bash -c` script that `echo` only prints as a
+    payload, on the plain line too (`test_known_fail_closed_residuals_are_refused`). A
+    double-quoted body is read as written here too, but `_is_ssh_to_self`'s own
+    double-quoted reader still judges a lone body lowered, so
+    `echo "$(sudo -H ls s* l*)"` stays refused.
     `_reaches_self_over_ssh` judges the line in both readings described below
     (quote-aware, then `_MAIN_READING`), and the bodies once, in the quote-aware one,
     of the line and of each quoted assignment script in it (`a=x; echo $(...)`).

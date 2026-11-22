@@ -1084,9 +1084,10 @@ def _judge_ssh_to_self(text_lower: str, own_line: bool, raw_text: "str | None" =
     # where bash keeps it) nor bash's join of a ``<<`` line that ends in a backslash,
     # so on such a line this floor reads the whole line as before. bash matches a
     # closing line case-sensitively, so the bodies are found on the words as written
-    # and only then lowered; without them the view is not taken. These guards only
-    # turn the allow off, so the floor never refuses more than without the view.
-    cased = raw_text if raw_text is not None and raw_text.lower() == text_lower else None
+    # and only then lowered; without them, or off the caller's own line, the view is
+    # not taken. These guards only turn the allow off, so the floor never refuses
+    # more than without the view.
+    cased = raw_text if own_line and raw_text and raw_text.lower() == text_lower else None
     view = text_lower if cased is None else _heredoc_data_view(cased).lower()
     if (
         view != text_lower
