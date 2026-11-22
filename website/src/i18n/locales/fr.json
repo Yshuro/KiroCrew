@@ -25536,5 +25536,44 @@
       "label": "Ordinateurs connectés",
       "shared_crew_off": "Désactivé sur un Crew partagé"
     }
+  },
+  "managedEnv": {
+    "form": {
+      "intro": "Crée un environnement géré Kiro et lance une nouvelle crew dessus.",
+      "name_label": "Nom de la crew",
+      "name_placeholder": "my-crew",
+      "name_rule": "Utilise 2 à 32 lettres minuscules, chiffres ou tirets simples, en commençant par une lettre.",
+      "name_help": "L’environnement prend le nom de la crew.",
+      "ssh_config_note": "Ajoute un raccourci pour que cet ordinateur joigne tes environnements gérés. Il prend la forme de quelques lignes dans ton fichier de réglages ssh ({{path}}), que tu peux retirer plus tard ; rien d’autre ne change dans le fichier.",
+      "launch": "Lancer",
+      "ssh_add": "Configurer la connexion",
+      "ssh_ready": "{{path}} contient les réglages ssh qui permettent à Crew de joindre tes environnements gérés.",
+      "ssh_failed": "Impossible d’ajouter les réglages ssh",
+      "launch_needs_name": "Saisis un nom de crew pour lancer.",
+      "launch_needs_ssh": "Configure la connexion pour lancer.",
+      "ssh_failed_hint": "Vérifie que tu peux modifier {{path}}.",
+      "launch_fix_name": "Corrige le nom de la crew pour lancer.",
+      "ssh_preview": "Voir les lignes ajoutées",
+      "ssh_preview_why": "Ces lignes ne s’appliquent qu’aux noms {{hosts}} que Crew donne à tes environnements. Chaque connexion passe par ce Crew, qui l’authentifie pour une session ; root est l’utilisateur propre à l’environnement, et la vérification de la clé d’hôte est désactivée car chaque environnement est une machine neuve."
+    },
+    "row": {
+      "stop": "Arrêter l’environnement",
+      "resume": "Reprendre l’environnement",
+      "delete": "Supprimer l’environnement",
+      "delete_title": "Supprimer l’environnement de {{name}} ?",
+      "delete_body": "L’environnement géré et tout son contenu sont supprimés. C’est irréversible. La crew quitte ta liste une fois l’environnement supprimé.",
+      "delete_confirm": "Supprimer l’environnement",
+      "list_failed": "Impossible de lire tes environnements gérés.",
+      "gone": "Cet environnement ne fait plus partie de tes environnements gérés. Retire la crew de ta liste.",
+      "state_creating": "Environnement en démarrage",
+      "state_running": "Environnement en cours d’exécution",
+      "state_stopped": "Environnement arrêté",
+      "state_deleting": "Environnement en suppression",
+      "state_error": "Erreur de l’environnement",
+      "managed_by": "Environnement géré Kiro · Retirer enlève la crew de cette liste, mais conserve l’environnement. Pour le supprimer, utilise ··· > Supprimer l’environnement.",
+      "stop_failed": "Impossible d’arrêter l’environnement de {{name}}",
+      "resume_failed": "Impossible de reprendre l’environnement de {{name}}",
+      "delete_failed": "Impossible de supprimer l’environnement de {{name}}"
+    }
   }
 }

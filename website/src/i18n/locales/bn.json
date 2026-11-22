@@ -24941,5 +24941,44 @@
       "label": "যুক্ত কম্পিউটার",
       "shared_crew_off": "শেয়ার করা Crew-তে বন্ধ"
     }
+  },
+  "managedEnv": {
+    "form": {
+      "intro": "একটি Kiro managed environment তৈরি করো এবং তাতে একটি নতুন ক্রু চালাও।",
+      "name_label": "ক্রু-এর নাম",
+      "name_placeholder": "research",
+      "name_rule": "2 থেকে 32টি ছোট হাতের অক্ষর, সংখ্যা বা একক হাইফেন ব্যবহার করো, শুরু হবে অক্ষর দিয়ে।",
+      "name_help": "Environment-এর নাম ক্রু-এর নামে রাখা হয়।",
+      "ssh_config_note": "একটি শর্টকাট যোগ করে, যাতে এই কম্পিউটার তোমার managed environment-গুলোতে পৌঁছাতে পারে। এটি তোমার ssh সেটিংস ফাইলে ({{path}}) কয়েকটি লাইন হিসেবে যায়, যা পরে মুছে ফেলতে পারো; ফাইলের আর কিছু বদলায় না।",
+      "launch": "চালু করো",
+      "ssh_add": "কানেকশন সেট করো",
+      "ssh_ready": "{{path}}-এ সেই ssh সেটিংস আছে যা দিয়ে Crew তোমার managed environment-গুলোতে পৌঁছায়।",
+      "ssh_failed": "ssh সেটিংস যোগ করা গেল না",
+      "launch_needs_name": "চালু করতে ক্রু-এর নাম লেখো।",
+      "launch_needs_ssh": "চালু করতে কানেকশন সেট করো।",
+      "ssh_failed_hint": "দেখো তুমি {{path}} বদলাতে পারো কি না।",
+      "launch_fix_name": "চালু করতে ক্রু-এর নাম ঠিক করো।",
+      "ssh_preview": "যোগ হওয়া লাইনগুলো দেখো",
+      "ssh_preview_why": "এই লাইনগুলো শুধু Crew তোমার environment-গুলোকে যে {{hosts}} নাম দেয়, সেগুলোর জন্য। প্রতিটি কানেকশন এই Crew-এর মাধ্যমে যায়, যা একটি সেশনের জন্য সাইন ইন করে; root হলো environment-এর নিজের user, আর প্রতিটি environment নতুন মেশিন বলে host-key যাচাই বন্ধ।"
+    },
+    "row": {
+      "stop": "Environment থামাও",
+      "resume": "Environment আবার চালু করো",
+      "delete": "Environment মুছে ফেলো",
+      "delete_title": "{{name}}-এর environment মুছে ফেলবে?",
+      "delete_body": "Managed environment এবং এর সবকিছু মুছে যাবে। এটি আর ফেরানো যাবে না। Environment চলে গেলে ক্রু তোমার তালিকা থেকে সরে যায়।",
+      "delete_confirm": "Environment মুছে ফেলো",
+      "list_failed": "তোমার managed environment-গুলো পড়া গেল না।",
+      "gone": "এই environment আর তোমার managed environment-এ নেই। ক্রু-কে তোমার তালিকা থেকে সরাও।",
+      "state_creating": "Environment চালু হচ্ছে",
+      "state_running": "Environment চলছে",
+      "state_stopped": "Environment থেমে আছে",
+      "state_deleting": "Environment মোছা হচ্ছে",
+      "state_error": "Environment-এ ত্রুটি",
+      "managed_by": "Kiro managed environment · সরাও বেছে নিলে ক্রু এই তালিকা থেকে সরে যায়, কিন্তু environment থেকে যায়। সেটি মুছতে ··· > Environment মুছে ফেলো ব্যবহার করো।",
+      "stop_failed": "{{name}}-এর environment থামানো গেল না",
+      "resume_failed": "{{name}}-এর environment আবার চালু করা গেল না",
+      "delete_failed": "{{name}}-এর environment মোছা গেল না"
+    }
   }
 }

@@ -24941,5 +24941,44 @@
       "label": "जुड़े हुए कंप्यूटर",
       "shared_crew_off": "साझा Crew में बंद"
     }
+  },
+  "managedEnv": {
+    "form": {
+      "intro": "एक Kiro managed environment बनाओ और उस पर एक नई क्रू चलाओ।",
+      "name_label": "क्रू का नाम",
+      "name_placeholder": "research",
+      "name_rule": "2 से 32 छोटे अक्षर, अंक या एक-एक हाइफ़न इस्तेमाल करो, और शुरुआत अक्षर से करो।",
+      "name_help": "Environment का नाम क्रू के नाम पर रखा जाता है।",
+      "ssh_config_note": "एक शॉर्टकट जोड़ता है ताकि यह कंप्यूटर तुम्हारे managed environments तक पहुँच सके। यह तुम्हारी ssh सेटिंग फ़ाइल ({{path}}) में कुछ पंक्तियों के रूप में जाता है, जिन्हें तुम बाद में हटा सकते हो; फ़ाइल में और कुछ नहीं बदलता।",
+      "launch": "शुरू करो",
+      "ssh_add": "कनेक्शन सेट करो",
+      "ssh_ready": "{{path}} में वे ssh सेटिंग हैं जिनसे Crew तुम्हारे managed environments तक पहुँचता है।",
+      "ssh_failed": "ssh सेटिंग जोड़ी नहीं जा सकीं",
+      "launch_needs_name": "शुरू करने के लिए क्रू का नाम लिखो।",
+      "launch_needs_ssh": "शुरू करने के लिए कनेक्शन सेट करो।",
+      "ssh_failed_hint": "देखो कि तुम {{path}} बदल सकते हो।",
+      "launch_fix_name": "शुरू करने के लिए क्रू का नाम ठीक करो।",
+      "ssh_preview": "जोड़ी जाने वाली पंक्तियाँ देखो",
+      "ssh_preview_why": "ये पंक्तियाँ सिर्फ़ उन {{hosts}} नामों पर लागू होती हैं जो Crew तुम्हारे environments को देता है। हर कनेक्शन इसी Crew से होकर जाता है, जो उसे एक सत्र के लिए साइन इन करता है; root environment का अपना user है, और host-key जाँच बंद है क्योंकि हर environment एक नई मशीन है।"
+    },
+    "row": {
+      "stop": "Environment रोको",
+      "resume": "Environment फिर से शुरू करो",
+      "delete": "Environment हटाओ",
+      "delete_title": "{{name}} का environment हटाना है?",
+      "delete_body": "Managed environment और उसमें मौजूद सब कुछ हटा दिया जाएगा। इसे वापस नहीं किया जा सकता। Environment हटते ही क्रू तुम्हारी सूची से चली जाती है।",
+      "delete_confirm": "Environment हटाओ",
+      "list_failed": "तुम्हारे managed environments पढ़े नहीं जा सके।",
+      "gone": "यह environment अब तुम्हारे managed environments में नहीं है। क्रू को अपनी सूची से हटाओ।",
+      "state_creating": "Environment शुरू हो रहा है",
+      "state_running": "Environment चल रहा है",
+      "state_stopped": "Environment रुका हुआ है",
+      "state_deleting": "Environment हटाया जा रहा है",
+      "state_error": "Environment में गड़बड़ी",
+      "managed_by": "Kiro managed environment · हटाओ चुनने से क्रू इस सूची से निकल जाती है, पर environment बना रहता है। उसे मिटाने के लिए ··· > Environment हटाओ इस्तेमाल करो।",
+      "stop_failed": "{{name}} का environment रोका नहीं जा सका",
+      "resume_failed": "{{name}} का environment फिर से शुरू नहीं हो सका",
+      "delete_failed": "{{name}} का environment हटाया नहीं जा सका"
+    }
   }
 }

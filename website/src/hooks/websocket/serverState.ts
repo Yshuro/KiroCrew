@@ -118,6 +118,9 @@ const ALL_TARGETS: readonly RefreshTarget[] = [
   // The sign-in status lists the portals the company form warns for, which the
   // `crew_client` preview in config.json decides (`useKasLogin` KAS_LOGIN_STATUS_KEY).
   { queryKey: ['kas-login'] },
+  // The launch lanes Remote Crew offers follow that preview too (the managed-environment
+  // lane), so a toggle in another dashboard shows or withdraws its form here.
+  { queryKey: ['cloud', 'provisioners'] },
   // The Security panel's safety switches live in config.json; a save from
   // another tab reaches this one only through the config refresh frame.
   { queryKey: ['safety-switches'] },
@@ -346,6 +349,7 @@ export function refreshServerStateAfterReconnect(queryClient: QueryClient): void
   // another tab, which is how the update switches learn of it) was never
   // delivered either. Only observed readers refetch.
   queryClient.invalidateQueries({ queryKey: ['kirocrewConfig'] })
+  queryClient.invalidateQueries({ queryKey: ['cloud', 'provisioners'] })
   queryClient.invalidateQueries({ queryKey: ['safety-switches'] })
   queryClient.invalidateQueries({ queryKey: ['mcp-tool-grants'] })
   // The runtime monitor contract is fetched once with no staleTime, so a
