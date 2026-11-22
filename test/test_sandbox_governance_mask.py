@@ -1389,3 +1389,48 @@ class TestTheModelsSealRefusesAWritableCarveout:
         )
 
         assert (os.path.normpath(str(own)) in plan.writable) is approved
+
+
+class TestTheBotMoveLedgerIsSealedInEveryMode:
+    """The Bot-move ledger the gateway's approval gates read a moved Bot's held limits
+    from is read-only for every sandboxed child, its parent rename-guarded."""
+
+    @staticmethod
+    def _ledger() -> str:
+        from kiro_crew import mate_config_migration
+
+        return os.path.normpath(str(mate_config_migration._ledger_path()))
+
+    def test_the_resolver_names_the_ledger_the_gate_reads(self) -> None:
+        assert sandbox._resolved_mate_ledger_targets() == [self._ledger()]
+
+    @_POSIX_ONLY
+    @pytest.mark.parametrize("mode", _MODES)
+    def test_linux_seals_the_ledger_read_only(self, mode: str) -> None:
+        hidden, readonly, files = _launcher_sets(mode)
+        ledger = self._ledger()
+
+        assert ledger in readonly, f"the ledger is writable through the {mode} sandbox"
+        assert ledger not in hidden and ledger not in files, "the ledger must stay readable"
+
+    @pytest.mark.parametrize("mode", _MODES)
+    def test_macos_denies_writes_to_the_ledger(self, mode: str) -> None:
+        profile = sandbox._build_seatbelt_profile(mode)
+        ledger = self._ledger()
+
+        assert f'(deny file-write* (literal "{ledger}"))' in profile
+        assert f'(deny file-write* (subpath "{ledger}"))' in profile
+        assert f'(deny file-read* (subpath "{ledger}"))' not in profile
+
+    @_POSIX_ONLY
+    @pytest.mark.parametrize(
+        "backend", (sandbox_plan.BACKEND_NAMESPACE, sandbox_plan.BACKEND_SEATBELT)
+    )
+    def test_the_ledger_parent_cannot_be_renamed(self, backend: str) -> None:
+        mates = os.path.dirname(self._ledger())
+        os.makedirs(mates, exist_ok=True)
+        host = sandbox._live_plan_host(
+            sandbox_plan.SandboxRequest(tier="standard", backend=backend)
+        )
+
+        assert mates in host.readonly_ancestor_guards

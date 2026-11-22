@@ -72,7 +72,7 @@ from kiro_crew import (  # noqa: F401
 )
 from kiro_crew.apps import agent_readonly_dirs, credential_masks  # noqa: F401
 from kiro_crew.atomic_write import fsync_dir, refuse_linked_parent  # noqa: F401
-from kiro_crew.config.paths import config_dir, kiro_agents_dir  # noqa: F401
+from kiro_crew.config.paths import config_dir, kiro_agents_dir, mate_agents_dir  # noqa: F401
 from kiro_crew.config.write_provenance import (  # noqa: F401
     launcher_record as _published_file_record,
 )
@@ -744,6 +744,7 @@ if TYPE_CHECKING:  # the forwarded names, visible to type checkers and IDEs
         _relocated_policy_cache_dirs,
         _resolved_install_root_targets,
         _resolved_kiro_agents_targets,
+        _resolved_mate_ledger_targets,
         _resolves_to,
         _sandbox_policy,
         app_backend_secret_mask_targets,

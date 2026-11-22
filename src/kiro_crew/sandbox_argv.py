@@ -87,6 +87,7 @@ from kiro_crew.sandbox_tiers import (
     _relocated_policy_cache_dirs,
     _resolved_install_root_targets,
     _resolved_kiro_agents_targets,
+    _resolved_mate_ledger_targets,
     _sandbox_policy,
     configured_readonly_layer,
 )
@@ -474,6 +475,7 @@ def _live_plan_host(request: sandbox_plan.SandboxRequest) -> sandbox_plan.PlanHo
         )
     )
     kiro_agents_targets = tuple(_resolved_kiro_agents_targets())
+    mate_ledger_targets = tuple(_resolved_mate_ledger_targets())
     install_root_targets = tuple(_resolved_install_root_targets())
     # A renamed parent carries a seal away on both backends, so every entry resolving a
     # seal steps on is guarded, and so are the parents of its own spelling, which keep a
@@ -485,6 +487,7 @@ def _live_plan_host(request: sandbox_plan.SandboxRequest) -> sandbox_plan.PlanHo
         for target in (
             *voice_runtime_parents,
             *kiro_agents_targets,
+            *mate_ledger_targets,
             *(os.path.join(home, rel) for rel in (*_CREW_READONLY_TARGETS, *app_readonly)),
             *relocated_crew_readonly,
             *install_root_targets,
@@ -653,6 +656,7 @@ def _live_plan_host(request: sandbox_plan.SandboxRequest) -> sandbox_plan.PlanHo
         *voice_runtime_parents,
         *voice_runtime_ancestor_guards,
         *kiro_agents_targets,
+        *mate_ledger_targets,
         *install_root_targets,
         *readonly_ancestor_guards,
     ]
@@ -679,6 +683,7 @@ def _live_plan_host(request: sandbox_plan.SandboxRequest) -> sandbox_plan.PlanHo
         voice_runtime_parents=voice_runtime_parents,
         voice_runtime_ancestor_guards=voice_runtime_ancestor_guards,
         kiro_agents_targets=kiro_agents_targets,
+        mate_ledger_targets=mate_ledger_targets,
         install_root_targets=install_root_targets,
         readonly_ancestor_guards=readonly_ancestor_guards,
         caller_ancestor_guards=caller_ancestor_guards,
