@@ -65,23 +65,22 @@ export function slackCodeDraftFrom(c: SlackConfigData): SlackCodeDraft {
 /** The PUT fields for the Slack Code slice: only what differs from *saved*, so a
  *  save of an unrelated Slack field never re-validates a default (a stored model
  *  that has since become unavailable must not block a token change). A cleared
- *  picker sends null, which clears the stored value. With *conductorLocked*
- *  (config.local.json sets the switch, or may), `conductor_mode` is left out: the
- *  card shows it disabled, so a draft edit made before the lock landed is not
- *  something the person can see or undo, and sending it would refuse the whole
- *  save. */
+ *  picker sends null, which clears the stored value. A switch config.local.json
+ *  sets (or may) is left out: `conductor_mode` with *conductorLocked*, and
+ *  `code_channel_dispatch` with *d*'s `dispatchLocked`. The card shows it
+ *  disabled, so a draft edit made before the lock landed is not something the
+ *  person can see or undo, and sending it would refuse the whole save. */
 export function slackCodePayload(d: SlackCodeDraft, saved: SlackCodeDraft, conductorLocked = false): Partial<SlackConfigSave> {
   const out: Partial<SlackConfigSave> = {}
   for (const k of SLACK_CODE_SWITCHES) {
     if (d.switches[k] !== saved.switches[k]) out[k] = d.switches[k]
   }
-  // On a save that turns Code channels on, the sub-toggle's shown value is always
-  // sent (unless config.local.json owns it, where the toggle is locked): the
-  // server would otherwise decide helpers from the files as they are now, which
-  // a card read earlier may not show, and an off chosen here is then stored as
-  // an explicit off.
-  const enabling = d.switches.code_channels && !saved.switches.code_channels && !saved.dispatchLocked
-  if (d.dispatch !== saved.dispatch || enabling) out.code_channel_dispatch = d.dispatch
+  // On a save that turns Code channels on, the sub-toggle's shown value is sent
+  // even when unchanged: the server would otherwise decide helpers from the
+  // files as they are now, which a card read earlier may not show, and an off
+  // chosen here is then stored as an explicit off.
+  const enabling = d.switches.code_channels && !saved.switches.code_channels
+  if (!d.dispatchLocked && (d.dispatch !== saved.dispatch || enabling)) out.code_channel_dispatch = d.dispatch
   const wire = (x: SlackCodeDraft) => ({
     folder: x.folder || null,
     agent: x.agent || null,

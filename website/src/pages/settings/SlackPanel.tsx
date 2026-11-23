@@ -291,7 +291,13 @@ export function SlackPanel() {
   const [appToken, setAppToken] = useState('')
   const [botClear, setBotClear] = useState(false)
   const [appClear, setAppClear] = useState(false)
-  const [formKey, setFormKey] = useState(0)  // bump to remount secret fields after save
+  // Bump to remount that secret field after a save.
+  const [botKey, setBotKey] = useState(0)
+  const [appKey, setAppKey] = useState(0)
+  // The save's onSuccess reads the token fields as they are when it lands,
+  // not as they were when the request started.
+  const secretsRef = useRef({ botToken, appToken })
+  useEffect(() => { secretsRef.current = { botToken, appToken } }, [botToken, appToken])
   const [saved, setSaved] = useState(false)
   const [restartHint, setRestartHint] = useState(false)
   // Sticky until a reconnect succeeds: a later config-only save must not hide
@@ -354,32 +360,43 @@ export function SlackPanel() {
   // through the last step (which comes after the connection) until Close.
   const [wizardOpen, setWizardOpen] = useState(false)
 
-  // Sync the local draft when server config arrives. Guarded so only the
-  // initial load and post-save invalidation reseed it — a background refetch
-  // must not discard in-progress edits (including a just-pasted token).
+  // Sync the local draft when server config first arrives. Only the initial
+  // load seeds it: a background refetch or a save's invalidation must not
+  // discard in-progress edits (including a just-pasted token).
   const syncArmed = useRef(true)
-  // What the Slack Code draft was seeded from. The save sends only the fields
-  // that differ from THIS snapshot, not from the latest refetch: a background
-  // refetch that picks up a CLI edit leaves the draft as it was, so comparing
-  // against the refreshed data would send the stale draft value and undo it.
+  // What the Slack Code draft was seeded from on load, then what each save
+  // sent. The save sends only the fields that differ from THIS snapshot, not
+  // from the latest refetch: a background refetch that picks up a CLI edit
+  // leaves the draft as it was, so comparing against the refreshed data would
+  // send the stale draft value and undo it.
   const codeBaseline = useRef<SlackCodeDraft | null>(null)
-  // The owner ID the draft was seeded from, for the same reason: the save
-  // sends the owner only when the field was edited, so a save that lands
-  // while "Claim in Slack" confirms cannot write the old value back.
+  // The owner ID the draft was seeded from (then the one a save sent), for the
+  // same reason: the save sends the owner only when the field was edited, so a
+  // save that lands while "Claim in Slack" confirms cannot write the old value back.
   const ownerBaseline = useRef('')
   useEffect(() => {
-    if (data && syncArmed.current) {
+    if (!data) return
+    if (syncArmed.current) {
       syncArmed.current = false
       const seeded = draftFrom(data)
       codeBaseline.current = seeded.code
       ownerBaseline.current = seeded.owner_id.trim()
       setDraft(seeded)
       setBotToken(''); setAppToken(''); setBotClear(false); setAppClear(false)
+      return
     }
+    // The two Slack Code fields the draft and its baseline only read (never
+    // edit) follow every refetch: a save that stores Code channels or helper
+    // agents ends the first enable, and config.local.json can lock helper
+    // agents at any time. A stale copy would turn helper agents off with Code
+    // channels, or send the locked value, which the server refuses.
+    const { dispatchOnEnable, dispatchLocked } = slackCodeDraftFrom(data)
+    if (codeBaseline.current) codeBaseline.current = { ...codeBaseline.current, dispatchOnEnable, dispatchLocked }
+    setDraft(d => (d ? { ...d, code: { ...d.code, dispatchOnEnable, dispatchLocked } } : d))
   }, [data])
 
   const saveMut = useMutation({
-    mutationFn: (body: Partial<SlackConfigSave>) => api.saveSlackConfig(body),
+    mutationFn: ({ body }: { body: Partial<SlackConfigSave>; code: SlackCodeDraft }) => api.saveSlackConfig(body),
     onError: (e: unknown) => {
       // The API client throws with the raw response body; extract the
       // server's error field (e.g. "bot_token rejected by Slack
@@ -397,7 +414,7 @@ export function SlackPanel() {
       // leaves a quiet form that reads as saved.
       setError(msg)
     },
-    onSuccess: (res, vars) => {
+    onSuccess: (res, { body: vars, code }) => {
       setSaved(true)
       setRestartHint(!!res.restart_required)
       if (res.reconnect_required) {
@@ -412,8 +429,28 @@ export function SlackPanel() {
       }
       setVerifyWarning(res.verify_warning || '')
       setTokensVerified(!!(vars.bot_token || vars.app_token) && !res.verify_warning)
-      syncArmed.current = true
-      setFormKey(k => k + 1)
+      codeBaseline.current = code
+      if (vars.owner_id !== undefined) ownerBaseline.current = vars.owner_id
+      // Not re-arming the draft sync: the server took the values we sent, and
+      // a reseed would overwrite any field edited while the save was in
+      // flight. Only the tokens just sent are cleared, and only while the
+      // field still holds what was sent.
+      const s = secretsRef.current
+      const nextBot = vars.bot_token && s.botToken.trim() === vars.bot_token ? '' : s.botToken
+      const nextApp = vars.app_token && s.appToken.trim() === vars.app_token ? '' : s.appToken
+      setBotToken(nextBot)
+      setAppToken(nextApp)
+      if (vars.bot_token_clear) setBotClear(false)
+      if (vars.app_token_clear) setAppClear(false)
+      // Collapse each token field to its stored preview unless it holds a token
+      // typed since; a pending removal survives (`cleared` is held here).
+      if (!nextBot) setBotKey(k => k + 1)
+      if (!nextApp) setAppKey(k => k + 1)
+      // A blank folder name was saved as the channel's own name: show that,
+      // unless the field was cleared after a named folder was sent.
+      setDraft(d => (d && d.session_folder_on && !d.session_folder.trim() && vars.session_folder === CHANNEL_NAME
+        ? { ...d, session_folder: vars.session_folder }
+        : d))
       setTimeout(() => setSaved(false), 6000)
       qc.invalidateQueries({ queryKey: ['slack-config'] })
       // The manifest renders for the saved Slack Code switches, so a save can
@@ -484,7 +521,7 @@ export function SlackPanel() {
     else if (botToken.trim()) payload.bot_token = botToken.trim()
     if (appClear) payload.app_token_clear = true
     else if (appToken.trim()) payload.app_token = appToken.trim()
-    saveMut.mutate(payload)
+    saveMut.mutate({ body: payload, code: draft.code })
   }, [draft, botToken, appToken, botClear, appClear, saveMut, data?.code_channel_conductor_mode_overlay_state])
 
   if (isLoading) return <p className="text-[13px] text-muted p-4">{i18nT('pages.settings.slackPanel.loading_slack_config')}</p>
@@ -655,13 +692,16 @@ export function SlackPanel() {
       <SettingsSection title={i18nT('pages.settings.slackPanel.required')}>
         <SettingsCard index={1}>
           <SecretField
-            key={`bot-${formKey}`}
+            key={`bot-${botKey}`}
             label={i18nT('pages.settings.slackPanel.slack_bot_token')}
             description={i18nT('pages.settings.slackPanel.from_oauth_permissions_after_installing_your_sla')}
             placeholder={i18nT('pages.settings.slackPanel.paste_slack_bot_token_xoxb')}
             isSet={data.bot_token_set}
             preview={data.bot_token_preview}
             readOnly={ro}
+            // A value still pending (typed during a save) stays in the editor,
+            // even once the refetch reports a stored credential.
+            editing={botToken ? true : undefined}
             value={botToken}
             onChange={setBotToken}
             cleared={botClear}
@@ -669,13 +709,16 @@ export function SlackPanel() {
             setupLink={{ href: SETUP_GUIDE, label: i18nT('pages.settings.slackPanel.where_to_find_the_bot_token') }}
           />
           <SecretField
-            key={`app-${formKey}`}
+            key={`app-${appKey}`}
             label={i18nT('pages.settings.slackPanel.slack_app_token')}
             description={i18nT('pages.settings.slackPanel.app_level_token_required_for_socket_mode_starts')}
             placeholder={i18nT('pages.settings.slackPanel.paste_slack_app_token_xapp')}
             isSet={data.app_token_set}
             preview={data.app_token_preview}
             readOnly={ro}
+            // A value still pending (typed during a save) stays in the editor,
+            // even once the refetch reports a stored credential.
+            editing={appToken ? true : undefined}
             value={appToken}
             onChange={setAppToken}
             cleared={appClear}
@@ -846,7 +889,7 @@ export function SlackPanel() {
           </span>
         )}
         {/* No hand-off: `botToken` / `appToken` (SecretField drafts, never
-            persisted — `formKey` even remounts them after a successful save) and
+            persisted — a successful save clears the ones it sent) and
             the unsaved `draft` are exactly what a failed save did not store; the
             hand-off unmounts this panel and would lose them. */}
         <ErrorNotice message={error} variant="inline" />

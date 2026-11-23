@@ -135,6 +135,12 @@ describe('Slack Code payload', () => {
     expect(slackCodePayload({ ...saved, conductorMode: true }, saved, true)).toEqual({})
   })
 
+  it('leaves out a helper-agents edit config.local.json locks, keeping the rest', () => {
+    const saved = slackCodeDraftFrom(config({ code_channels: true, code_channel_dispatch_overlay: true }))
+    // The lock was read after the draft turned helper agents on.
+    expect(slackCodePayload({ ...saved, dispatch: true, effort: 'high' }, saved)).toEqual({ code_channel_defaults: { reasoning_effort: 'high' } })
+  })
+
   it('reads an unset or unknown approval mode as Ask and stores Ask as unset', () => {
     expect(slackCodeDraftFrom(config()).approval).toBe('ask')
     expect(slackCodeDraftFrom(config({ code_channel_defaults: { folder: null, agent: null, model: null, reasoning_effort: null, approval_mode: 'yolo' } })).approval).toBe('ask')
@@ -331,6 +337,65 @@ describe('Code channels card', () => {
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
     expect(save.mock.calls[0][0]).not.toHaveProperty('code_channels')
     expect(save.mock.calls[0][0]).not.toHaveProperty('code_channel_dispatch')
+  })
+
+  it('turning Code channels off after the save that enabled them leaves helper agents as saved', async () => {
+    const { save } = seed({ code_channel_dispatch_on_enable: true })
+    await hydrated()
+    const cc = screen.getByRole('switch', { name: 'Code channels' })
+    fireEvent.click(cc)
+    // The enabling save stored both, so the server no longer reads a first
+    // enable. The refetch also reads the workspace as disconnected: that pill is
+    // the signal this read rendered, and the draft takes it in that render's effect.
+    vi.mocked(api.getSlackConfig).mockResolvedValue(config({
+      connected: false, code_channels: true, code_channel_dispatch: true, code_channel_dispatch_on_enable: false,
+    }))
+    fireEvent.click(saveBtn())
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    expect(save.mock.calls[0][0]).toMatchObject({ code_channels: true, code_channel_dispatch: true })
+    await screen.findByText('Not connected', undefined, CHAINED)
+    fireEvent.click(cc)
+    fireEvent.click(saveBtn())
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(save.mock.calls[1][0]).toMatchObject({ code_channels: false })
+    expect(save.mock.calls[1][0]).not.toHaveProperty('code_channel_dispatch')
+  })
+
+  it('a helper-agents lock read after a save keeps the next enabling save from sending them', async () => {
+    const { save } = seed()
+    await hydrated()
+    // config.local.json starts setting helper agents while the panel is open;
+    // the save's refetch is the first read that says so (and, as the pill
+    // shows, the read the draft takes in that render's effect).
+    vi.mocked(api.getSlackConfig).mockResolvedValue(config({
+      connected: false, code_channel_dispatch_overlay: true, code_channel_dispatch_overlay_state: 'pinned',
+    }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Show thinking' }))
+    fireEvent.click(saveBtn())
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    await screen.findByText('Not connected', undefined, CHAINED)
+    fireEvent.click(screen.getByRole('switch', { name: 'Code channels' }))
+    fireEvent.click(saveBtn())
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(save.mock.calls[1][0]).toMatchObject({ code_channels: true })
+    expect(save.mock.calls[1][0]).not.toHaveProperty('code_channel_dispatch')
+  })
+
+  it('does not resend a saved switch on the next, unrelated save', async () => {
+    const { save } = seed()
+    await hydrated()
+    fireEvent.click(screen.getByRole('switch', { name: 'Code channels' }))
+    vi.mocked(api.getSlackConfig).mockResolvedValue(config({ code_channels: true }))
+    const cfgBefore = vi.mocked(api.getSlackConfig).mock.calls.length
+    fireEvent.click(saveBtn())
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+    expect(save.mock.calls[0][0]).toMatchObject({ code_channels: true })
+    await waitFor(() => expect(vi.mocked(api.getSlackConfig).mock.calls.length).toBeGreaterThan(cfgBefore), CHAINED)
+    fireEvent.click(screen.getByRole('switch', { name: 'Show thinking' }))
+    fireEvent.click(saveBtn())
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+    expect(save.mock.calls[1][0]).toMatchObject({ show_thinking: false })
+    expect(save.mock.calls[1][0]).not.toHaveProperty('code_channels')
   })
 
   it('saves the dispatch sub-toggle on its own and drops the off note', async () => {
