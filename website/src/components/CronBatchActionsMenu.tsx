@@ -1,10 +1,12 @@
-import { useState, type ReactNode } from 'react'
-import { MoreHorizontal, Clock, Pause, Play, Folder, FolderPlus, Trash2 } from 'lucide-react'
+import { useId, useState, type ReactNode } from 'react'
+import { MoreHorizontal, Clock, Pause, Play, Folder, FolderPlus, Send, Trash2 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
   DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
 } from './ui/dropdown-menu'
 import { Btn } from './ui'
+import ErrorNotice, { ErrorNoticeMenuItem } from './ErrorNotice'
+import { useTelegramDestinations } from './TelegramDestinationSelect'
 import type { CronJob } from '../types'
 import type { CronFolder } from '../utils/cronFolders'
 import type { useMenuOpensDialog } from '../hooks/useMenuOpensDialog'
@@ -35,9 +37,40 @@ export function batchActionLabel(action: CronBatchAction): string {
   }
 }
 
+/** Send to Telegram topic: the job form's destinations, read only while the menu
+ *  is open, and offered while Telegram is connected, like the form's field, or
+ *  while the read failed, so a failure never reads as "not connected". */
+function TelegramSubmenu({ busy, onSend }: { busy: boolean; onSend: (targetId: string) => void }) {
+  const { rows, connected, failed } = useTelegramDestinations()
+  const errorId = useId()
+  if (!connected && !failed) return null
+  const loadFailed = i18nT('components.jobForm.telegram_destination_load_failed')
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger disabled={busy}>
+        <Send size={13} className="shrink-0 text-muted" />
+        <span>{i18nT('pages.schedulePage.batchActions.send_to_telegram')}</span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="min-w-[160px] max-h-[min(240px,var(--radix-dropdown-menu-content-available-height))]">
+        {rows.map(r => (
+          <DropdownMenuItem key={r.id} onSelect={() => onSend(r.id)}>
+            <span className="truncate">{r.label}</span>
+          </DropdownMenuItem>
+        ))}
+        {failed && (
+          <>
+            <ErrorNotice id={errorId} variant="inline" className="px-2 py-1.5" message={loadFailed} />
+            <ErrorNoticeMenuItem Item={DropdownMenuItem} message={loadFailed} describedBy={errorId} />
+          </>
+        )}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  )
+}
+
 /** `run` and delete open a confirm dialog, so they go through `layer.openLayer`. */
 export default function CronBatchActionsMenu({
-  jobs, running, busy, layer, onAction, folders, onMove, onNewFolder, deleteCount, onDelete,
+  jobs, running, busy, layer, onAction, folders, onMove, onNewFolder, onSendToTelegram, deleteCount, onDelete,
 }: {
   jobs: CronJob[]
   running: Set<string>
@@ -47,6 +80,8 @@ export default function CronBatchActionsMenu({
   folders: CronFolder[]
   onMove: (folderId: string) => void
   onNewFolder: (moveTo?: boolean) => Promise<string | undefined> | void
+  /** Point the checked jobs at one Telegram destination (a `target_id`). */
+  onSendToTelegram: (targetId: string) => void
   deleteCount: number
   onDelete: () => void
 }) {
@@ -118,6 +153,7 @@ export default function CronBatchActionsMenu({
             </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        <TelegramSubmenu busy={busy} onSend={onSendToTelegram} />
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={busy || deleteCount === 0}

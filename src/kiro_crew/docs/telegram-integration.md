@@ -221,6 +221,11 @@ Telegram, send one message there, and it appears. A job has one destination, so
 picking one empties its Slack **Channel ID**, and filling in a Channel ID turns
 the Telegram destination off.
 
+To point several jobs at one topic, check them on the **Schedule** page and pick
+**Actions** → **Send to Telegram topic**, then the chat or topic. A job with a
+Slack **Channel ID** keeps it; it is listed as not updated, with any job whose
+update failed, and those jobs stay checked.
+
 Proactive messages (a cron's report, an agent's `send_message`) are plain text by
 default, so `**bold**` arrives with its asterisks. Pass `format="markdown"` to
 `send_message`, or to `ctx.notify(...)` in a cron script, to get bold, italics,
