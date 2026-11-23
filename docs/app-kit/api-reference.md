@@ -1193,6 +1193,35 @@ document with the owner's session, and a backend that mints an owner token throu
 local owner mint reaches the `POST` too, as it reaches `/enable` (see the
 [trust model](../architecture/app-platform-trust-model.md)).
 
+## Keep Alive
+
+`useKeepAlive(busy)` keeps your routed page running, hidden, when the person opens
+another dashboard page, for as long as `busy` is true: a recording, an upload, anything
+that must not stop when the page closes. It needs `APP_SDK_LEVEL >= 14` and no
+`permissions.api` entry.
+
+```tsx
+import * as sdk from '@kirocrew/app-sdk'
+
+const status = sdk.useKeepAlive?.(recording) ?? 'unsupported'
+// 'off' | 'on' | 'refused' | 'unsupported'
+```
+
+It is never on by default. Set `busy` true only while the work runs, and back to false
+as soon as it ends: a hidden page whose app sets it false closes at once.
+
+- While your page is hidden, every dashboard page shows a bar naming your app, with
+  **Open** (back to your page, the same instance) and **Stop** (the page closes, as it
+  would without keep-alive). `useAppInfo().active` is `false` while hidden.
+- At most two apps hold a keep-alive at once. A third gets `refused`; ask again by
+  setting `busy` false and then true.
+- A hidden page also closes when your app throws, or is turned off or uninstalled from
+  this dashboard.
+- `unsupported` means the surface cannot keep the page: a side-panel tab, a desktop
+  window, or a popped-out page.
+- Moving the page in and out of view moves its elements, so an `<iframe>` in it
+  reloads each time.
+
 ## Browser Media
 
 `useBrowserMedia(sessionKey, { pollMs })` gives your page play, pause, seek and volume

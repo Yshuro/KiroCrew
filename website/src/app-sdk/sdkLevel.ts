@@ -14,5 +14,7 @@
  * and `SessionChanges` and `DiffView`. Level 13 adds `useBrowserSites`: the app's
  * browsing list (declared sites and the ones the owner added), and the owner's edits
  * through `/api/apps/<name>/browser-sites`, where adding a site asks the owner first.
+ * Level 14 adds `useKeepAlive`: a routed page stays mounted, hidden, while the app
+ * says it is busy, and the dashboard names it on every page with Open and Stop.
  */
-export const APP_SDK_LEVEL = 13
+export const APP_SDK_LEVEL = 14

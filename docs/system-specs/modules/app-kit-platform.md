@@ -7819,7 +7819,8 @@ on an installed app's `credentialMasks` (§37), `permissions.chatLaunch` and
 `useBrowserView` and `useBrowserCoords` (RFC app-sdk-browser, step 1c) and the SDK's
 `appWebOriginStatus` (§18k); level 12 adds `permissions.kiroOperations`, its route and
 `ctx.kiro_call` (§47), and the SDK's `SessionChanges` and `DiffView` (§18l); level 13 adds
-`/api/apps/<name>/browser-sites` and the SDK's `useBrowserSites` (§45). Several seams share level 7,
+`/api/apps/<name>/browser-sites` and the SDK's `useBrowserSites` (§45); level 14 adds the
+SDK's `useKeepAlive`, which keeps a routed page mounted, hidden, while the app is busy. Several seams share level 7,
 three share level 8, and the open batch that level 10 starts shares level 10, so an app that needs one
 feature-detects it (the manifest key or attribute, or the SDK export), never the level alone. An app reads `ctx.sdk_level` or the SDK export to detect an
 older host and degrade, instead of failing on a missing attribute.
