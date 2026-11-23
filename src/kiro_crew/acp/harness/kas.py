@@ -62,6 +62,13 @@ from kiro_crew.acp.kas_app_identity import resolve_app_identity_launches
 from kiro_crew.acp.kas_endpoints import CLOUD_CONFIG_ENDPOINT_ENV
 from kiro_crew.acp.kas_host_auth import answer_get_access_token, vault_holds_identity_off_loop
 from kiro_crew.acp.kas_mcp_json_legacy import legacy_mcp_json
+from kiro_crew.acp.kas_native_batch import native_batch
+from kiro_crew.acp.kas_parent_limits import (
+    ParentLimitsUnreadable,
+    hold_to_parents,
+    projected_parent_limits,
+    run_is_held,
+)
 from kiro_crew.acp.kas_prompt import prompt_unread_notice, spec_prompt
 from kiro_crew.acp.kas_settings_mcp import (
     declared_servers,
@@ -1239,7 +1246,9 @@ class KasHarness(MembershipHarness):
 
     # ── Seam 3: session/new and session/load extras ──
 
-    def record_session_projection(self, handle: Any, custom_agents: Any, active_agent: str) -> None:
+    def record_session_projection(
+        self, handle: Any, custom_agents: Any, active_agent: str, shipped_helper_parent: str = ""
+    ) -> None:
         """Record what the batch this session registered auto-approves.
 
         KAS keeps that batch for the session's life (``set_mode`` activates an entry
@@ -1304,8 +1313,18 @@ class KasHarness(MembershipHarness):
         handle.kas_crew_answered_read_paths = projected_answered_read_paths(
             custom_agents, active_agent, getattr(handle, "_bound_cwd", "")
         )
+        # A sub-agent run: what the agents above it are refused at the gate
+        # (`spec-parent-limits` tier).
+        handle.kas_parent_limits = projected_parent_limits(
+            custom_agents, active_agent, str(getattr(handle, "_bound_cwd", "") or "")
+        )
         handle.kas_projected_agent = active_agent if custom_agents else ""
         handle.kas_registered_agents = list(custom_agents) if custom_agents else []
+        # Host memory of the helper this registration mounted, written with the batch:
+        # a registration that mounted none, or for another agent, leaves it empty.
+        handle.kas_shipped_helper_parent = (
+            active_agent if custom_agents and shipped_helper_parent == active_agent else ""
+        )
         handle.kas_agent_prompt_notice = self.agent_prompt_notice if custom_agents else ""
         handle.kas_agent_prompt_applied = self.agent_prompt_applied
         handle.kas_bundle_engine_version = self.bundle_engine_version
@@ -1353,6 +1372,15 @@ class KasHarness(MembershipHarness):
             kas_model_catalog.vault_identity, getattr(self, "spawn_machine_auth", None)
         )
         if not agent:
+            # No entry is built for this session, so a parent's denies have no carrier.
+            if session_key.startswith("subagent:") and await asyncio.to_thread(
+                run_is_held, session_key, ""
+            ):
+                raise AcpAgentUnavailable(
+                    "this sub-agent names no agent, so the denies of the agent that "
+                    "started it cannot be applied and it was not started",
+                    agent=agent,
+                )
             return SessionExtras(vault_identity=vault_identity)
 
         def _build() -> tuple[
@@ -1362,7 +1390,9 @@ class KasHarness(MembershipHarness):
             dict[str, dict[str, Any]],
             frozenset[str],
             str,
+            str,
         ]:
+            helper_for: list[str] = []
             agent_mod.require_fork_governance(agent, work_dir)
             try:
                 agent_mod.ensure_agent_materialized(agent)
@@ -1647,7 +1677,9 @@ class KasHarness(MembershipHarness):
             )
             # A refused target the engine could still load from disk is denied, so
             # the refusal the notice names holds.
-            custom_agents = [*deny_refused_targets(custom_agents, agent, refused), *targets]
+            custom_agents = native_batch(
+                deny_refused_targets(custom_agents, agent, refused), targets
+            )
             # Resolved HERE, in this thread, for the runtime's hoist: the managed
             # launch it stamps the session token onto comes from the ``kirocrew``
             # launcher lookup, which probes the filesystem and PATH.
@@ -1674,7 +1706,21 @@ class KasHarness(MembershipHarness):
                 from kiro_crew.agent_sdk.kas_project_hooks import with_folder_pre_tool_mark
 
                 custom_agents = with_folder_pre_tool_mark(custom_agents, agent, spec, bool(gated))
-            return custom_agents, snapshot, managed, apps, withdrawn, notice
+            try:
+                # A sub-agent run is refused what the sessions above it are refused.
+                custom_agents = hold_to_parents(custom_agents, agent, session_key, folder)
+            except ParentLimitsUnreadable as exc:
+                # Refused, never started without its parents' denies.
+                raise AcpAgentUnavailable(str(exc), agent=agent) from exc
+            return (
+                custom_agents,
+                snapshot,
+                managed,
+                apps,
+                withdrawn,
+                notice,
+                "".join(helper_for[-1:]),
+            )
 
         try:
             (
@@ -1684,6 +1730,7 @@ class KasHarness(MembershipHarness):
                 app_launches,
                 withdrawn_stubs,
                 withheld_notice,
+                helper_parent,
             ) = await asyncio.to_thread(
                 # The session's agent and each of its sub-agent targets read the same
                 # app manifests, skill files and agent specs: one start reads each once.
@@ -1698,6 +1745,7 @@ class KasHarness(MembershipHarness):
                 app_launches=app_launches,
                 withdrawn_stub_names=withdrawn_stubs,
                 withheld_credentials_notice=withheld_notice,
+                shipped_helper_parent=helper_parent,
             )
         except ForkGovernanceUnresolved as exc:
             raise AcpRuntimeError(str(exc)) from exc
