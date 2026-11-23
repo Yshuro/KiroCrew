@@ -77,6 +77,13 @@ afterEach(() => {
 })
 
 describe('a canvas artifact', () => {
+  it('lets the page canvas shrink to a short popout without a fixed height floor', () => {
+    render(wrap(<CanvasArtifactBody artifact={art(serializeCanvas(emptyCanvas()))} isCurrent />))
+    const page = screen.getByTestId('canvas-artifact-page')
+    expect(page).toHaveClass('min-h-0')
+    expect(page).not.toHaveClass('min-h-[420px]')
+  })
+
   it('saves a pause after the last change, as a live save on the token it read, and chains the next token', async () => {
     updateArtifact.mockResolvedValueOnce({ content_token: 't2' }).mockResolvedValueOnce({ content_token: 't3' })
     render(wrap(<CanvasArtifactBody artifact={art(serializeCanvas(emptyCanvas()))} isCurrent />))

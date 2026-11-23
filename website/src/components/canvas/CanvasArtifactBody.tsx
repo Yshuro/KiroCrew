@@ -16,7 +16,7 @@
  * `canvasPending`: they flush what is waiting first, and ask before dropping
  * edits a failed or refused save left on this page.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
@@ -39,7 +39,19 @@ const isConflict = (err: unknown) => err instanceof ApiError && err.status === 4
 
 const isOwnToken = (own: ReadonlySet<string>, token: string | undefined) => !!token && own.has(token)
 
-export default function CanvasArtifactBody({ artifact, isCurrent }: { artifact: Artifact; isCurrent: boolean }) {
+/** What the full-page canvas hands its floating controls. */
+export interface CanvasChromeActions {
+  /** The save state, or why the canvas is read-only; null when there is nothing to say. */
+  status: string | null
+}
+
+export default function CanvasArtifactBody({ artifact, isCurrent, chrome }: {
+  artifact: Artifact
+  isCurrent: boolean
+  /** The page's own controls, floated over the canvas. Without them the canvas shows its save
+   *  state, or why it is read-only, as a chip in the same corner. */
+  chrome?: (actions: CanvasChromeActions) => ReactNode
+}) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   // Every token this page's saves made current or replaced: each names content
@@ -328,9 +340,10 @@ export default function CanvasArtifactBody({ artifact, isCurrent }: { artifact: 
 
   if (!canvas) {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-3 p-3" data-testid="canvas-artifact-page">
+        {chrome?.({ status: null })}
         {/* Nothing here is unsaved, so the agent can be asked to repair the stored document. */}
-        <ErrorNotice title={t('components.canvas.unreadable_title')} message={t('components.canvas.unreadable_message')} askAgent />
+        <ErrorNotice title={t('components.canvas.unreadable_title')} message={t('components.canvas.unreadable_message')} askAgent className="w-full max-w-[520px]" />
       </div>
     )
   }
@@ -338,12 +351,20 @@ export default function CanvasArtifactBody({ artifact, isCurrent }: { artifact: 
   const status = state === 'saving' ? t('components.canvas.status_saving')
     : state === 'pending' ? t('components.canvas.status_pending')
       : state === 'saved' ? t('components.canvas.status_saved') : null
+  const readOnlyNote = !editable
+    ? (!isCurrent ? t('components.canvas.past_version') : redacted || readRedacted ? t('components.canvas.hidden_text') : t('components.canvas.linked_file'))
+    : null
 
-  return (
-    // Fills the page's remaining height (flex, `min-h-0` down from the page root), so the canvas
-    // is the only thing that scrolls; no height is guessed from the page chrome.
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
-      {confirmDialog}
+  const chipText = editable ? status : readOnlyNote
+  const statusChip = chipText && (
+    <div data-testid={editable ? 'canvas-save-status' : 'canvas-readonly-note'} aria-live="polite"
+      className="pointer-events-none rounded-md bg-bg-elevated px-2 py-0.5 text-[11px] text-muted shadow-sm">
+      {chipText}
+    </div>
+  )
+
+  const notices = (
+    <>
       {state === 'conflict' && (
         <ErrorNotice
           title={t('components.canvas.conflict_title')}
@@ -365,25 +386,20 @@ export default function CanvasArtifactBody({ artifact, isCurrent }: { artifact: 
           footer={<div className="mt-2"><Btn onClick={retry}>{t('components.canvas.save_retry')}</Btn></div>}
         />
       )}
-      <div
-        data-testid="canvas-artifact"
-        className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border"
-      >
+    </>
+  )
+
+  // The canvas takes the whole page, edge to edge with no border or rounding. The page's own
+  // controls (`chrome`) and the save notices float over its top-left corner.
+  return (
+    <div className="relative min-h-0 min-w-0 flex-1" data-testid="canvas-artifact-page">
+      {confirmDialog}
+      <div data-testid="canvas-artifact" className="absolute inset-0 overflow-hidden">
         <CanvasEditor canvas={canvas} onChange={onChange} readOnly={!editable} epoch={epoch} />
-        {editable && status && (
-          <div data-testid="canvas-save-status" aria-live="polite"
-            className="pointer-events-none absolute left-3 top-3 rounded-md bg-bg-elevated px-2 py-0.5 text-[11px] text-muted shadow-sm"
-            style={{ zIndex: 9 }}>
-            {status}
-          </div>
-        )}
-        {!editable && (
-          <div data-testid="canvas-readonly-note"
-            className="pointer-events-none absolute left-3 top-3 rounded-md bg-bg-elevated px-2 py-0.5 text-[11px] text-muted shadow-sm"
-            style={{ zIndex: 9 }}>
-            {!isCurrent ? t('components.canvas.past_version') : redacted || readRedacted ? t('components.canvas.hidden_text') : t('components.canvas.linked_file')}
-          </div>
-        )}
+      </div>
+      <div className="pointer-events-none absolute left-3 right-3 top-3 flex flex-col items-start gap-2" style={{ zIndex: 10 }}>
+        <div className="pointer-events-auto">{chrome ? chrome({ status: editable ? status : readOnlyNote }) : statusChip}</div>
+        <div className="pointer-events-auto w-full max-w-[520px]">{notices}</div>
       </div>
     </div>
   )

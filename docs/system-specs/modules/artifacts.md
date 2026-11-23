@@ -1845,19 +1845,39 @@ two shapes by id. `jsonCanvas.ts` reads and writes the format:
   blank re-typing that turns a JSON-looking first save into `json` cannot apply.
   Importing a `.canvas` file through **Add Artifact** gives the same kind, and
   **Download** writes one back out.
-- **A full-height page of its own.** A canvas opens on a page that never
-  scrolls (`hasFullHeightPage` in `lib/artifactKinds.ts`): the canvas fills the
-  height the layout leaves under the header (flex and `min-h-0` down from the page
-  root, not a `calc(100dvh - N)` guess) and is the only thing that scrolls, pans or
-  zooms. The header is one slim row: Back, the title (it truncates), a Details
-  toggle, Version, the agent chat and More. The Details bar, closed until opened and
-  scrolling inside itself (at most 40% of the window), holds what the other kinds
-  show beside or below the document: the kind badge, folder, Star and tags, Compare
-  with, the slug, the description, the created/updated line and the activity log.
-  The chat panel takes the page's height beside the canvas, and a comparison scrolls
-  inside its own area. Because those controls are not mounted while the bar is
-  closed, a guide step aimed at the folder chip (`artifacts.detail.move-to-folder`)
-  finds nothing on a canvas until Details is open.
+- **A full-page canvas.** A canvas opens on its own page
+  (`ArtifactDetailPageCanvas.tsx`), not the generic header and body: the canvas
+  fills everything under the app's top bar, edge to edge with no border or
+  rounding, and the page never scrolls. The page's controls float over the
+  top-left corner as one pill in two groups: Back and the title (click to rename)
+  with the save state, then the version, the agent chat and a menu with Star and
+  Tags (current version only), Comments, Activity, Snapshot, Copy, Send to
+  session and Download. On a past version the menu leads with Revert (disabled
+  while saving), the same confirmed revert as the generic header's button,
+  kept in the menu so the pill holds two buttons beside the version. The pill
+  never grows past the board's width: the title truncates and the save state
+  yields first. Save failures and conflicts, and a failed versions load, star,
+  rename, Snapshot, Copy, Download or Send to session, float under
+  the pill as error notices without the agent hand-off, because the board may
+  hold a waiting autosave.
+- **The canvas page's tags and columns.** Tags open in a popover under the pill
+  with the same chips and add field as the generic header
+  (`components/ArtifactTagChips.tsx`). The agent chat, the comments and the
+  activity log each open as the one full-height column on the right, and the
+  canvas shrinks beside it; on a phone the open column takes the whole width and
+  the canvas is hidden (not unmounted) until it closes. Comments are on the whole
+  artifact, since a canvas has no text to anchor to. The comments column opens
+  only from the menu: the generic page's auto-reveal of its comments panel does
+  not apply. If an add, reply or edit draft is dirty, closing comments or
+  switching to Activity or chat hides the comments subtree instead of unmounting
+  it; reopening comments restores the same draft. A hidden dirty subtree takes
+  no column width and is absent from keyboard navigation and accessibility reads.
+  The generic page's kind badge, folder chip, Compare with,
+  description and created/updated line are not on this page. No registered
+  `artifacts.detail.*` location renders on a canvas: each id names one render
+  site, and those sites are in the generic header, so a guide step aimed at
+  `artifacts.detail.versions`, `.more`, `.comments` or `.move-to-folder` finds
+  nothing on a canvas even where the pill draws the same control.
 - **No edit mode, live saves.** The editor is always live on the current
   version and saves a moment after the last change as a silent live save
   (`snapshot: false`), so moving shapes never adds a numbered version; the
@@ -1880,7 +1900,7 @@ two shapes by id. `jsonCanvas.ts` reads and writes the format:
   direct response remains the latest read until the page delivers another one.
 - **The page's controls see its saves.** A canvas has no edit buffer, so the
   page's `dirty` never covers it; `canvasPending.ts` lets the page reach the
-  mounted canvas instead. Back, the version picker, Compare with, Snapshot and Send to
+  mounted canvas instead. Back, the version picker, Snapshot and Send to
   session flush what is waiting first, so a snapshot holds what the screen
   shows, and Snapshot refuses when the flush cannot save. Every local exit
   through the page's navigation dispatcher checks the leave guard immediately
@@ -1888,8 +1908,8 @@ two shapes by id. `jsonCanvas.ts` reads and writes the format:
   content read the document the editor shows, waiting edits included. A guarded
   in-app exit is held while a save is waiting or in flight, and the save is
   finished while the page still exists to show a failure; edits a failed or
-  refused save left on the page ask before Back, a version switch, entering a
-  comparison or any guarded exit drops them.
+  refused save left on the page ask before Back, a version switch or any
+  guarded exit drops them.
 - **Undo never crosses a replacement.** Content that replaces the canvas from
   outside (another tab, an agent, Reload) clears the editor's undo history and
   ends any gesture still open (a text edit, a colour drag, a move or resize), so

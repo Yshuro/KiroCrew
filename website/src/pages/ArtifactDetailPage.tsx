@@ -40,6 +40,7 @@ import {
 import { pickBoundSlot, useArtifactDetailPageCompanion } from './useArtifactDetailPageCompanion'
 import { useArtifactDetailPageMenu, ArtifactDetailPageHeader } from './ArtifactDetailPageHeader'
 import { ArtifactDetailPageBody } from './ArtifactDetailPageBody'
+import ArtifactDetailPageCanvas from './ArtifactDetailPageCanvas'
 import { artifactCompanionContextPrompt } from '../components/artifactCompanionContext.prompt'
 
 export { isEditableKind }
@@ -366,6 +367,21 @@ export default function ArtifactDetailPage({ popout = false }: { popout?: boolea
   }
   if (!artifact) return <>{confirmDialog}<div className="p-6 text-muted">{i18nT('pages.artifactDetailPage.not_found')}</div></>
 
+  // A canvas gets the whole page: the board fills it and its controls float over it.
+  if (artifact.kind === 'canvas') {
+    return (
+      <>
+        <ArtifactDetailPageCanvas artifact={artifact} popout={popout} stateRead={stateRead} documentRead={documentRead}
+          editorRead={editorRead} composerRead={composerRead} menuRead={menuRead} companionRead={companionRead}
+          isMobile={isMobile} panel={panel} setPanel={setPanel} sidebarUserToggledRef={sidebarUserToggledRef}
+          openCompanionChat={openCompanionChat} handleRevert={handleRevert} commentsRead={commentsRead} threadsRead={threadsRead}
+          commentsQuery={commentsQuery} durableComments={durableComments} commentCount={commentCount}
+          remoteSyncError={remoteSyncError} />
+        {confirmDialog}
+      </>
+    )
+  }
+
   return (
     <>
       <ArtifactDetailPageHeader
@@ -373,7 +389,6 @@ export default function ArtifactDetailPage({ popout = false }: { popout?: boolea
         toggleSidebar={toggleSidebar} handleRevert={handleRevert} openCompanionChat={openCompanionChat}
         popout={popout} stateRead={stateRead} documentRead={documentRead} editorRead={editorRead}
         composerRead={composerRead} menuRead={menuRead}
-        navigateToSlot={(slotKey) => sendNav({ path: '/chat', slotKey })}
       />
 
       <ArtifactDetailPageBody
