@@ -43,6 +43,7 @@ from kiro_crew.mcp_gateway.launch_approval import (
     launch_fingerprint,
     target_stem,
 )
+from kiro_crew.mcp_gateway.launch_approval_heal import prefold_digests
 from kiro_crew.mcp_gateway.rewriter_env import (
     _expand_env_map,
     _must_stay_wrapped,
@@ -569,6 +570,9 @@ def _rewrite_single_spec(
     if not isinstance(servers, dict):
         servers = {}
     inject = inject_servers or {}
+    if approvals is not None:
+        # Declared in the global settings: the server exists, whatever this agent mounts.
+        approvals.declared.update(target_stem(name) for name in inject)
     # The settings servers ``tools`` leaves out that still need an entry here, so
     # the host's own merge cannot start them (see the docstring).
     refused: dict[str, Any] = {}
@@ -600,6 +604,8 @@ def _rewrite_single_spec(
         if not isinstance(entry, dict):
             new_servers[name] = entry
             continue
+        if approvals is not None:
+            approvals.declared.add(target_stem(name))
         declared_cmd = entry.get("command")
         if declared_cmd:
             seen_targets.add((declared_cmd, _hashable_args(entry.get("args"))))
@@ -1126,7 +1132,8 @@ def _admit_launch(
         return True
     target_args = _spec_args(entry)
     fingerprint = launch_fingerprint(resolved_cmd, target_args, entry_env)
-    derived_env_hash = env_fingerprint(_expand_env_map(entry_env))
+    expanded_env = _expand_env_map(entry_env)
+    derived_env_hash = env_fingerprint(expanded_env)
     if not approvals.admit(
         name,
         fingerprint,
@@ -1136,6 +1143,7 @@ def _admit_launch(
         # host secret behind ``${VAR}`` is never rendered on the dashboard.
         env=entry_env,
         derived_env_hash=derived_env_hash,
+        prefold=prefold_digests(entry_env, expanded_env),
     ):
         # Names only: the args and env may carry tokens.
         if approvals.refused.get(target_stem(name)) == REFUSED_TOO_MANY:

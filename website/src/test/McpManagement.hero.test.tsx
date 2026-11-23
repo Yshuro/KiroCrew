@@ -461,6 +461,37 @@ describe('the Review dialog', () => {
     await waitFor(() => expect(document.activeElement).toBe(button), { timeout: 5000 })
   })
 
+  it('sends "Always trust changes" only for the server it was checked on, unchecked by default', async () => {
+    const ctl = mockTwo()
+    const setStub = vi.spyOn(api, 'mcpGatewaySetStub').mockImplementation((async (name: string) => {
+      ctl.drop(name)
+      return { ok: true, name, stub: true }
+    }) as never)
+    mount()
+    const { dialog } = await openDialog()
+    const search = block(dialog, 'search-mcp')
+    const box = within(search).getByRole('checkbox', { name: M('trust_changes_label') }) as HTMLInputElement
+    expect(box.checked).toBe(false)
+    expect(within(search).getByTitle(M('trust_changes_tip')).tagName).toBe('BUTTON')
+    fireEvent.click(box)
+    fireEvent.click(within(search).getByRole('button', { name: M('approve_button') }))
+    await waitFor(
+      () => expect(setStub).toHaveBeenCalledWith('search-mcp', true, 'search-shown', false, undefined, true),
+      { timeout: 5000 },
+    )
+    fireEvent.click(within(block(dialog, 'tickets-mcp')).getByRole('button', { name: M('approve_button') }))
+    await waitFor(() => expect(setStub).toHaveBeenCalledWith('tickets-mcp', true, 'tickets-shown'), { timeout: 5000 })
+  })
+
+  it('says on the card what waiting means', async () => {
+    mockTwo()
+    mount()
+    const heading = await screen.findByText(M('approval_title', { count: 2 }), undefined, { timeout: 5000 })
+    const card = heading.closest('section') as HTMLElement
+    expect(within(card).getByText(M('approval_body'))).toBeTruthy()
+    expect(card.textContent).not.toMatch(/for your OK|own copy/i)
+  })
+
   it('shows the refusal in the block when the launch changed underneath, and approves nothing else', async () => {
     mockTwo()
     const setStub = vi.spyOn(api, 'mcpGatewaySetStub').mockRejectedValue(

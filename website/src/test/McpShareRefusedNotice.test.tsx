@@ -2,7 +2,9 @@
 //
 // Contract under test:
 // - a server on the share list whose launch the gateway refused is named, with
-//   the restart line and a link to the MCP Servers page's Sharing view, where it is approved.
+//   a link to the MCP Servers page's Sharing view, unless the approval card
+//   above lists it (an approvable launch): the card already asks about it.
+// - nothing failed, so the line is a warning (role status), with no agent hand-off.
 // - the link lands on Customize → MCP Servers, Sharing view, a surface served for anyone (no
 //   dependence on Developer Mode).
 // - the list comes from the gateway's `share_refused`, which matches a refusal
@@ -92,10 +94,9 @@ describe('McpShareRefusedNotice', () => {
     mount(<McpShareRefusedNotice />)
     const notice = await screen.findByTestId('mcp-share-refused', undefined, WAIT)
     expect(notice).toHaveTextContent('2 servers set to share are not shared: alpha-mcp, beta-mcp.')
-    expect(notice).toHaveTextContent('every chat starts its own copy')
-    expect(notice).toHaveTextContent('Approve sharing')
-    expect(notice).toHaveTextContent('Settings → About → Restart gateway')
-    const link = screen.getByRole('link', { name: 'Review in MCP Servers' })
+    expect(notice).toHaveTextContent('Each chat launches its own MCP server.')
+    expect(notice).not.toHaveTextContent('Restart gateway')
+    const link = screen.getByRole('link', { name: 'Open Sharing' })
     expect(link).toHaveAttribute('href', MCP_MANAGEMENT_PATH)
     fireEvent.click(link)
     expect(await screen.findByTestId('where')).toHaveTextContent('/capabilities?tab=mcp-servers&view=sharing')
@@ -107,7 +108,7 @@ describe('McpShareRefusedNotice', () => {
     )
     mount(<McpShareRefusedNotice stagedChanges />)
     await screen.findByTestId('mcp-share-refused', undefined, WAIT)
-    const link = screen.getByRole('link', { name: 'Review in MCP Servers' })
+    const link = screen.getByRole('link', { name: 'Open Sharing' })
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
     expect(link).toHaveAttribute('href', MCP_MANAGEMENT_PATH)
@@ -119,26 +120,50 @@ describe('McpShareRefusedNotice', () => {
     )
     mount(<McpShareRefusedNotice />)
     await screen.findByTestId('mcp-share-refused', undefined, WAIT)
-    expect(screen.getByRole('link', { name: 'Review in MCP Servers' })).not.toHaveAttribute('target')
+    expect(screen.getByRole('link', { name: 'Open Sharing' })).not.toHaveAttribute('target')
   })
 
-  it('renders the refusal as an error notice with the agent hand-off', async () => {
+  it('is a warning, not an error, and offers no agent hand-off', async () => {
     mockApi.mcpGatewayStatus.mockResolvedValue(
       status({ share_refused: { 'alpha-mcp': 'added_outside_dashboard' } }),
     )
     mount(<McpShareRefusedNotice />)
     const notice = await screen.findByTestId('mcp-share-refused', undefined, WAIT)
-    expect(notice).toHaveAttribute('role', 'alert')
-    expect(screen.getByRole('button', { name: /ask the agent/i })).toBeInTheDocument()
+    expect(notice).toHaveAttribute('role', 'status')
+    expect(notice).toHaveAttribute('data-tone', 'warn')
+    expect(screen.queryByRole('button', { name: /ask the agent/i })).toBeNull()
   })
 
-  it('offers no agent hand-off while the page holds staged edits', async () => {
+  it('leaves out a server the approval card lists', async () => {
     mockApi.mcpGatewayStatus.mockResolvedValue(
-      status({ share_refused: { 'alpha-mcp': 'added_outside_dashboard' } }),
+      status({
+        launch_refused: {
+          'alpha-mcp': { reason: 'changed_needs_reapproval', complete: true, expected_launch: 'a:b' },
+          'beta-mcp': { reason: 'too_many_launches', complete: false, launch_cap: 32 },
+        },
+        share_refused: { 'alpha-mcp': 'changed_needs_reapproval', 'beta-mcp': 'too_many_launches' },
+      }),
     )
-    mount(<McpShareRefusedNotice stagedChanges />)
-    await screen.findByTestId('mcp-share-refused', undefined, WAIT)
-    expect(screen.queryByRole('button', { name: /ask the agent/i })).toBeNull()
+    mount(<McpShareRefusedNotice />)
+    const notice = await screen.findByTestId('mcp-share-refused', undefined, WAIT)
+    expect(notice).toHaveTextContent('1 server set to share is not shared: beta-mcp.')
+    expect(notice).not.toHaveTextContent('alpha-mcp')
+  })
+
+  it('says nothing when the approval card lists every refused server', async () => {
+    mockApi.mcpGatewayStatus.mockResolvedValue(
+      status({
+        launch_refused: { 'alpha-mcp': { reason: 'changed_needs_reapproval', complete: true, expected_launch: 'a:b' } },
+        share_refused: { 'alpha-mcp': 'changed_needs_reapproval' },
+      }),
+    )
+    mount(<McpShareRefusedNotice />)
+    await waitFor(() => expect(mockApi.mcpGatewayStatus).toHaveBeenCalled(), WAIT)
+    await waitFor(
+      () => expect(lastClient?.getQueryState(['mcpGatewayStatus'])?.status).toBe('success'),
+      WAIT,
+    )
+    expect(screen.queryByTestId('mcp-share-refused')).toBeNull()
   })
 
   it('uses the singular form for one server', async () => {
@@ -179,7 +204,7 @@ describe('McpShareRefusedNotice', () => {
     ])
     mount(<McpTab />)
     await screen.findByTestId('mcp-share-refused', undefined, WAIT)
-    const link = () => screen.getByRole('link', { name: 'Review in MCP Servers' })
+    const link = () => screen.getByRole('link', { name: 'Open Sharing' })
     expect(link()).not.toHaveAttribute('target')
     fireEvent.click(await screen.findByRole('button', { name: /Uninstall/ }, WAIT))
     await waitFor(() => expect(link()).toHaveAttribute('target', '_blank'))

@@ -1185,6 +1185,8 @@ async def api_mcp_server_detail(request: web.Request) -> web.Response:
 
 
 if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and IDEs
+    import functools  # noqa: F401
+
     from kiro_crew.config.loader import read_endorsed_config_text  # noqa: F401
     from kiro_crew.dashboard.handlers.mcp_agent_sync import (  # noqa: F401
         _builtin_mcp_server_names,
@@ -1291,6 +1293,7 @@ if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and
         api_mcp_quarantine_clear,
         api_mcp_servers,
     )
+    from kiro_crew.mcp_gateway.launch_approval_heal import forget_trust  # noqa: F401
 
 
 async def api_mcp_apply(request: web.Request) -> web.Response:

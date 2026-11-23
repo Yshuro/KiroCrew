@@ -55,7 +55,9 @@ from pathlib import Path
 from typing import Any, Collection, Iterable, Mapping
 
 from kiro_crew.config.paths import config_dir
+from kiro_crew.mcp_gateway import launch_approval_heal as _heal
 from kiro_crew.mcp_gateway.hashing import gateway_path, hash_command, hash_launch_env
+from kiro_crew.mcp_gateway.launch_approval_heal import CASING_AUDIT_REASON  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +244,14 @@ class LaunchApprovals:
     #: through ``env.saved_command_casing`` (stem -> fingerprint -> the
     #: approved source fingerprint and pair it was admitted under).
     casing_healed: dict[str, dict[str, tuple[str, str]]] = field(default_factory=dict)
+    #: Likewise for a launch whose approval predates the ``PATH`` fold.
+    prefold_healed: dict[str, dict[str, tuple[str, str]]] = field(default_factory=dict)
+    #: Stems the operator chose "Always trust changes to this server" for, in the dashboard.
+    trusted: set[str] = field(default_factory=set)
+    #: Fingerprints admitted this pass only because their stem is trusted.
+    trust_admitted: dict[str, dict[str, str]] = field(default_factory=dict)
+    #: Every server stem an agent spec declares, as this pass read them.
+    declared: set[str] = field(default_factory=set)
     #: Additional redacted display argv found by the final target filter.
     refused_commands: dict[str, list[list[str]]] = field(default_factory=dict)
     #: Every approval identity and its redacted command/env displays seen this pass.
@@ -414,40 +424,6 @@ class LaunchApprovals:
         self.live_overflow.setdefault(stem, set()).add(identity)
         return _launch_displays(launch, env)
 
-    def _casing_repair_of_approved(
-        self,
-        stem: str,
-        fingerprint: str,
-        derived_env_hash: str,
-        launch: tuple[str, list[str]] | None,
-    ) -> tuple[str, str] | None:
-        """The approved fingerprint and pair *launch* repairs, or ``None``.
-
-        The approved spelling differs from the live command only in the case of
-        its extension, the repair maps it onto the live command, and its exact
-        pair, same args and env, is approved with a stored display. The repair
-        reads the spelling from the directory entry, so no agent chooses it.
-        """
-        if launch is None:
-            return None
-        from kiro_crew.env import saved_command_casing  # deferred: config.loader import path
-
-        command, args = str(launch[0]), [str(a) for a in launch[1]]
-        root, ext = os.path.splitext(command)
-        env_hash = _split(fingerprint)[1]
-        for spelling in {root + ext.upper(), root + ext.lower()} - {command}:
-            approved_hash = hash_command(spelling, args)
-            source = f"{approved_hash}:{env_hash}"
-            source_pair = launch_pair(approved_hash, derived_env_hash)
-            if (
-                source in self.approved.get(stem, ())
-                and self.admits_launch(stem, approved_hash, derived_env_hash)
-                and source_pair in self.approved_displays.get(stem, {})
-                and saved_command_casing(spelling) == command
-            ):
-                return source, source_pair
-        return None
-
     def admit(
         self,
         name: str,
@@ -457,6 +433,7 @@ class LaunchApprovals:
         launch: tuple[str, list[str]] | None = None,
         env: Mapping[str, Any] | None = None,
         derived_env_hash: str,
+        prefold: tuple[str, str] | None = None,
     ) -> bool:
         """Whether *name* may launch *fingerprint* outside the sandbox.
 
@@ -464,7 +441,8 @@ class LaunchApprovals:
         ``kirocrew-*`` server repaired to the managed invocation): it is
         recorded without needing an operator approval, because nothing
         agent-writable chose it. ``launch`` is the ``(command, args)`` behind
-        the fingerprint, kept for a probe pass to report.
+        the fingerprint, kept for a probe pass to report. ``prefold`` is its
+        ``launch_approval_heal.prefold_digests``, for a store older than the fold.
         """
         stem = target_stem(name)
         command_hash, _declared_env_hash = _split(fingerprint)
@@ -490,10 +468,18 @@ class LaunchApprovals:
             and fingerprint in self.approved.get(stem, ())
             and not self.admits_launch(stem, command_hash, derived_env_hash)
         )
-        healed = None
+        healed = prefolded = None
         if not (self.probe or managed or rebind):
-            healed = self._casing_repair_of_approved(stem, fingerprint, derived_env_hash, launch)
-        rebind = rebind or healed is not None
+            healed = _heal.casing_repair_of_approved(
+                self, stem, fingerprint, derived_env_hash, launch
+            )
+            prefolded = (
+                None if healed else _heal.prefold_approval_of(self, stem, fingerprint, prefold)
+            )
+        trusted = not (self.probe or rebind or healed or prefolded) and _heal.trusts_change(
+            self, stem, managed
+        )
+        rebind = rebind or healed is not None or prefolded is not None or trusted
         additions: list[tuple[Mapping[str, Collection[Any]], Collection[Any]]] = []
         # A rebind is an approved launch, so like the exact one above it is not
         # counted against the display set; what it adds to the store stays capped.
@@ -509,6 +495,7 @@ class LaunchApprovals:
             )
             if launch is not None:
                 additions.append((self.captured_launches, (fingerprint,)))
+        additions = _heal.without_sources(self, stem, prefolded, additions)
         if not self._admission_allowed(stem, name, additions):
             return False
         if self.probe:
@@ -525,6 +512,10 @@ class LaunchApprovals:
         if rebind:
             if healed is not None:
                 self.casing_healed.setdefault(stem, {})[fingerprint] = healed
+            elif prefolded is not None:
+                self.prefold_healed.setdefault(stem, {})[fingerprint] = prefolded
+            elif trusted:
+                self.trust_admitted.setdefault(stem, {})[fingerprint] = identity
             else:
                 self.rebind_base.setdefault(stem, frozenset(self.approved_pairs.get(stem, ())))
                 self.rebound.setdefault(stem, {})[identity] = fingerprint
@@ -537,7 +528,19 @@ class LaunchApprovals:
             logger.info(
                 "mcp launch approvals: %s keeps its approval; only %s changed",
                 _bounded_name(name),
-                "its command's extension case" if healed else "a ${VAR} value in its declared env",
+                (
+                    "its command's extension case"
+                    if healed
+                    else (
+                        "how its digest folds the gateway's PATH"
+                        if prefolded
+                        else (
+                            "its launch, and the operator trusts its changes"
+                            if trusted
+                            else "a ${VAR} value in its declared env"
+                        )
+                    )
+                ),
             )
             return True
         self.names.setdefault(stem, _bounded_name(name))
@@ -853,6 +856,8 @@ def _parse(raw: Any) -> LaunchApprovals:
                 approvals.approved_displays[stem] = displays
             name = record.get("name")
             approvals.names[stem] = _bounded_name(name if isinstance(name, str) else stem)
+            if record.get("trust_changes") is True:
+                approvals.trusted.add(stem)
     refused = raw.get("refused")
     if isinstance(refused, dict):
         valid_refused = sorted(
@@ -963,6 +968,7 @@ def _document(approvals: LaunchApprovals, refused: Mapping[str, Mapping[str, Any
             "name": _bounded_name(approvals.names.get(stem, stem)),
             "fingerprints": sorted(fps),
             "pairs": sorted(pairs),
+            **({"trust_changes": True} if stem in approvals.trusted else {}),
         }
         displays = {
             pair: {"command": list(command), "env": list(env)}
@@ -1072,12 +1078,6 @@ def _pairs_under(pairs: Iterable[str], command_hash: str) -> set[str]:
     return {pair for pair in pairs if _split(pair)[0] == command_hash}
 
 
-#: Audit reason for a pair admitted because only a ``${VAR}`` value changed.
-REBIND_AUDIT_REASON = "approved launch, ${VAR} value changed"
-#: Audit reason for a pair admitted because only the PATHEXT casing repair moved.
-CASING_AUDIT_REASON = "approved launch, Windows command casing repaired"
-
-
 def _settle_rebinds(
     approvals: LaunchApprovals, stem: str, current_pairs: set[str], before: set[str]
 ) -> tuple[set[str], set[str], set[str]]:
@@ -1148,11 +1148,19 @@ def save_pass(approvals: LaunchApprovals, path: Path | None = None) -> bool:
                 if approvals.rebound[stem][pair] not in before
             }
             # A casing repair is written only while the store still approves its source.
-            for fp, (source, source_pair) in approvals.casing_healed.get(stem, {}).items():
+            healed = {
+                **approvals.casing_healed.get(stem, {}),
+                **approvals.prefold_healed.get(stem, {}),
+            }
+            for fp, (source, source_pair) in healed.items():
                 if source not in before or source_pair not in before_pairs:
                     withdrawn.add(fp)
                     dropped.add(launch_pair(_split(fp)[0], _split(source_pair)[1]))
+            if stem not in current.trusted:
+                withdrawn |= set(approvals.trust_admitted.get(stem, {}))
+                dropped |= set(approvals.trust_admitted.get(stem, {}).values())
             withheld[stem] = withdrawn
+            superseded = _heal.superseded_sources(approvals, stem, withdrawn)
             fps = {fp for fp in fps if fp not in withdrawn}
             if not fps:
                 continue
@@ -1166,8 +1174,8 @@ def save_pass(approvals: LaunchApprovals, path: Path | None = None) -> bool:
                 )
             }
             name = approvals.names.get(stem, stem)
-            final_fps = before | fps
-            final_pairs = (before_pairs | captured_pairs) - retired
+            final_fps = (before | fps) - superseded
+            final_pairs = (before_pairs | captured_pairs) - retired - superseded
             if not current._admission_allowed(
                 stem,
                 name,
@@ -1218,12 +1226,13 @@ def save_pass(approvals: LaunchApprovals, path: Path | None = None) -> bool:
             if current._stem_admitted(stem, str(record.get("name", stem))):
                 current.stored_refused[stem] = record
         refused = current.stored_refused
-        if refused != original_refused:
-            changed = True
+        changed = (
+            _heal.forget_unseen_trust(approvals, current) or refused != original_refused or changed
+        )
         if not changed:
             return False
         _write(target, _document(current, refused))
-    for reason, fingerprints in _captured_by_reason(approvals, withheld).items():
+    for reason, fingerprints in _heal.captured_by_reason(approvals, withheld).items():
         logger.warning(
             "mcp launch approvals: recorded %d launch fingerprint(s) for %s (%s)",
             sum(len(v) for v in fingerprints.values()),
@@ -1233,28 +1242,12 @@ def save_pass(approvals: LaunchApprovals, path: Path | None = None) -> bool:
     return True
 
 
-def _captured_by_reason(
-    approvals: LaunchApprovals, withheld: Mapping[str, set[str]]
-) -> dict[str, dict[str, set[str]]]:
-    """Split what a pass captured by why it was admitted, for the audit line.
-
-    A rebound fingerprint is an operator-approved declaration whose ``${VAR}``
-    expansion changed, a casing-healed one an approved launch whose command the
-    PATHEXT casing repair rewrote; every other captured fingerprint is a managed launch.
-    A fingerprint in *withheld* (stem -> fingerprints the save did not write) is left out.
-    """
-    by_reason: dict[str, dict[str, set[str]]] = {}
-    for stem, fps in approvals.captured.items():
-        rebound = set(approvals.rebound.get(stem, {}).values())
-        healed = approvals.casing_healed.get(stem, {})
-        for fingerprint in fps - withheld.get(stem, set()):
-            reason = REBIND_AUDIT_REASON if fingerprint in rebound else "managed launch"
-            reason = CASING_AUDIT_REASON if fingerprint in healed else reason
-            by_reason.setdefault(reason, {}).setdefault(stem, set()).add(fingerprint)
-    return by_reason
-
-
-def approve(launches: Mapping[str, Iterable[ResolvedLaunch]], path: Path | None = None) -> None:
+def approve(
+    launches: Mapping[str, Iterable[ResolvedLaunch]],
+    path: Path | None = None,
+    *,
+    trusted: Collection[str] = (),
+) -> None:
     """Record exactly *launches* as the approved launches of their server names.
 
     *launches* maps a server name to the launches it resolved to when the
@@ -1264,7 +1257,10 @@ def approve(launches: Mapping[str, Iterable[ResolvedLaunch]], path: Path | None 
     beside it. The env the daemon may forward is the env those launches
     derived when they were resolved, so a backend the running daemon spawns
     before the next rewrite still gets its declared env; that rewrite derives
-    it again. Gateway-side writer only: the dashboard stub toggle.
+    it again. Gateway-side writer only: the dashboard stub toggle. A name in
+    *trusted* keeps later launch changes shared ("Always trust changes to this
+    server"); every other approved name loses that choice, so each approval is
+    a fresh decision.
     """
     target = path or approvals_path()
     decided: dict[str, tuple[str, set[str], set[str]]] = {}
@@ -1304,6 +1300,7 @@ def approve(launches: Mapping[str, Iterable[ResolvedLaunch]], path: Path | None 
             current.approved_pairs[stem] = set(pairs)
             current.approved_displays[stem] = displays
             current.names[stem] = _bounded_name(name)
+            (current.trusted.add if name in trusted else current.trusted.discard)(stem)
             decided[stem] = (name, fps, pairs)
         refused = {s: r for s, r in current.stored_refused.items() if s not in decided}
         for stem, reason in current.refused.items():
@@ -1328,6 +1325,7 @@ class ApprovalSnapshot:
     names: dict[str, str]
     refused: dict[str, dict[str, Any]]
     displays: dict[str, dict[str, tuple[list[str], list[str]]]] = field(default_factory=dict)
+    trusted: set[str] = field(default_factory=set)
 
 
 def revoke(names: Iterable[str], path: Path | None = None) -> ApprovalSnapshot:
@@ -1358,6 +1356,8 @@ def revoke(names: Iterable[str], path: Path | None = None) -> ApprovalSnapshot:
             for stem in stems
             if stem in current.stored_refused
         }
+        snapshot.trusted = stems & current.trusted
+        current.trusted -= stems
         for stem in stems:
             current.approved.pop(stem, None)
             current.approved_pairs.pop(stem, None)
@@ -1408,6 +1408,7 @@ def restore(snapshot: ApprovalSnapshot, path: Path | None = None) -> None:
                 if stem in snapshot.refused
             }
         )
+        current.trusted |= snapshot.trusted & restore_stems
         _write(target, _document(current, current.stored_refused))
 
 
