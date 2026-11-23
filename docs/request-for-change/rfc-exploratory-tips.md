@@ -1,11 +1,11 @@
 ---
 title: One exploratory tip beside "Thinking..." while a turn runs, on by default
-status: draft
+status: accepted
 author: chenmingwei23, with a kirocrew agent session
 created: 2026-11-22
 last-audited: 2026-11-22
 audited-at: cb3c2f0703
-doc-pr: null
+doc-pr: 40792
 implementation-prs: [39769]
 tracking-issues: [39753]
 supersedes: []
@@ -14,7 +14,7 @@ superseded-by: []
 
 # RFC: Exploratory tips beside "Thinking..."
 
-- Status: draft. Nothing on main follows it. It asks a maintainer to accept one change to what the chat shows by default while a turn runs. A maintainer records acceptance on this Status line, in the `status` field and in the index row.
+- Status: accepted on 2026-11-22. The code change approver approved head `ec0a3ada5d` of [#40792](https://github.com/kirodotdev/KiroCrew/pull/40792), and maintainer chenmingwei23 merged it to main as `fbca546eb9`. That accepts one change to what the chat shows by default while a turn runs. Nothing on main follows it yet; the implementation is [#39769](https://github.com/kirodotdev/KiroCrew/pull/39769).
 - Tracking issue: [#39753](https://github.com/kirodotdev/KiroCrew/issues/39753) (its design comment has the same screenshots).
 - Implementation: draft [#39769](https://github.com/kirodotdev/KiroCrew/pull/39769), read at head `02e732ded1`. Main was read at `cb3c2f0703`.
 - Why this lands first: the First Principles lane blocked #39769 because the tip shows on every desktop turn by default and the only tips RFC on the base, [rfc-tips-kit.md](rfc-tips-kit.md), is `draft`. That lane reads the decision off the base branch, so it needs this document merged with a non-draft status.
