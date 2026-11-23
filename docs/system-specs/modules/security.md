@@ -1219,8 +1219,15 @@ Two mechanisms make "the split changed nothing for a caller" a tested claim rath
     archive test, and the read state one floor read shares with the reads nested in it.
     A bundle or option word is read in its submitted case when that case can be
     recovered, and in every case it could have been in when it cannot.
+  - `argv_floor_git_grammar.py` — the git grammar the git/tar floor reads a `git` argv
+    with: the local-only verbs and the second-level reading of `archive`, `submodule` and
+    `remote`, where the subcommand sits behind global options and redirections, the
+    transport operands and the remote-host test, the `ext::` decoder, the config entries
+    one invocation carries, the alias bodies git can run from them, and the transport-URL
+    config keys.
   - `argv_floor_git_tar.py` — the git/tar self-target floor (`_is_git_tar_to_self`),
-    which reads the tar grammar, the ssh floor's front end and the host verdicts below it.
+    which reads the tar and git grammars, the ssh floor's front end and the host verdicts
+    below it.
   - `argv_floor_git.py` — protected or ambiguous git-publish detection.
   Governance-home path writes are intentionally outside this module and are
   enforced by the OS sandbox. Structure is the point: the product name in a path,

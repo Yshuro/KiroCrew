@@ -95,11 +95,15 @@ FORBIDDEN_BEFORE_THE_LIST = (
 #: floor), ``argv_floor_tar`` (the line-cap split of its tar grammar) and
 #: ``argv_floor_ssh_operand`` (the line-cap split of the ssh operand reader). The security
 #: package loads before the list, so the owners cannot move behind it; nothing else loads.
+#: Raised by 1 for each server: the line-cap split of ``security.argv_floor_git_tar`` moved
+#: the git grammar it reads a git argv with into the owner ``security.argv_floor_git_grammar``,
+#: which the facade imports with the rest of its owners; the module count rose by that one
+#: file and nothing new loads.
 PACKAGE_MODULE_CEILING = {
-    "mcp-core": 496,
-    "mcp-cron": 364,
-    "mcp-guide": 358,
-    "mcp-mate": 359,
+    "mcp-core": 497,
+    "mcp-cron": 365,
+    "mcp-guide": 359,
+    "mcp-mate": 360,
 }
 
 #: The modules that read the two live values in the spawn tools' descriptions. They are
