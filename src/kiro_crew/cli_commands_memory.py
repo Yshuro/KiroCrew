@@ -833,8 +833,12 @@ def _memory_verb(args: argparse.Namespace) -> None:
         _memory_backup_cmd(action, args)
         return
     # "carve" opens the store NAMED on the command line, not the shared open below.
+    # A named store is read under the same hold as the shared open's (see there).
     if action == "carve":
-        _memory_carve(args)
+        with contextlib.ExitStack() as carve_hold:
+            if named_store_or_empty(getattr(args, "store", None) or DEFAULT_MEMORY_STORE):
+                carve_hold.enter_context(memory_store_namespace_lock(read_only_ok=True))
+            _memory_carve(args)
         return
     # "import-text" parses its file and opens the store itself, and only to save.
     if action == "import-text":
@@ -878,12 +882,16 @@ def _memory_verb(args: argparse.Namespace) -> None:
     # import write into a store none of those checks measured.
     #
     # `memory_store_namespace_lock` is ordered BEFORE the store's own file locks, so
-    # holding it around the open cannot invert. Taken only for an `import` into a
-    # NAMED store, the only path that removes a file.
+    # holding it around the open cannot invert. Taken for every verb that names a
+    # store here (`import`, `export --store`): an `import` into a NAMED store removes
+    # the empty database it created, and a read that checked the file in between and
+    # opened it after would recreate it, so the read's check, open and close are one
+    # hold too. A read passes `read_only_ok`, as a snapshot does. The default store
+    # keeps its path: its absence is a normal state, and nothing removes it.
     import_wrote_nothing = False
     with contextlib.ExitStack() as create_guard:
-        if action == "import" and named_store_or_empty(store_name):
-            create_guard.enter_context(memory_store_namespace_lock())
+        if named_store_or_empty(store_name):
+            create_guard.enter_context(memory_store_namespace_lock(read_only_ok=action != "import"))
         db_path = _admitted_store_path(store_name, cfg, may_create=action == "import")
         if db_path is None:
             sys.exit(1)

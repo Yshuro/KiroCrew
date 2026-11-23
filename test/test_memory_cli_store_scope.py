@@ -889,16 +889,85 @@ class TestCreationIsExclusivelyOwned:
         assert events.index("lock-enter") < events.index("admit") < events.index("lock-exit")
         assert events.index("lock-enter") < events.index("version") < events.index("lock-exit")
 
-    def test_a_read_verb_takes_no_namespace_lock(
+    def test_a_read_of_the_default_store_takes_no_namespace_lock(
         self, seeded, monkeypatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """Scoped deliberately: serializing every memory verb is not the fix."""
+        """Scoped deliberately: only a named store's database is ever removed."""
         events = self._spy(monkeypatch)
 
-        cc._memory_cmd(_ns(mem_action="export", output=None, store=_ACME))
+        cc._memory_cmd(_ns(mem_action="export", output=None, store=None))
         capsys.readouterr()
 
         assert "lock-enter" not in events, events
+
+    def test_a_named_store_read_checks_and_opens_inside_the_lock(
+        self, seeded, monkeypatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        events = self._spy(monkeypatch)
+
+        cc._memory_cmd(_ns(mem_action="export", output=None, store=_ACME))
+        assert _ACME_KEY in capsys.readouterr().out
+
+        assert events.index("lock-enter") < events.index("admit") < events.index("lock-exit")
+
+
+@pytest.mark.parametrize("verb", ["export", "carve"])
+def test_a_read_racing_an_import_that_removes_its_empty_database_leaves_none(
+    verb: str, seeded, stores, tmp_path: Path, monkeypatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The read's existence check, open and close are one hold with the import's removal.
+
+    Forced order: the import has created the database and holds the lock; the read
+    starts, and is let past its check only once the import has removed that file.
+    """
+    import threading
+
+    db_path = resolve_store_path(_ACME)
+    stores.close_all()
+    db_path.unlink()
+    dump = tmp_path / "rows.json"
+    dump.write_text(json.dumps({"semantic": [None]}), encoding="utf-8")
+    reached, removed, exits = threading.Event(), threading.Event(), []
+    read = _carve_ns(_ACME) if verb == "carve" else _ns(mem_action=verb, output=None, store=_ACME)
+
+    def run_read() -> None:
+        try:
+            cc._memory_cmd(read)
+        except SystemExit as exc:
+            exits.append(exc.code)
+
+    racer = threading.Thread(target=run_read)
+    real_lock, real_open = cc.memory_store_namespace_lock, cc.declared_store
+    real_import = VectorMemoryStore.import_memory
+
+    def watched_lock(*a: object, **kw: object) -> object:
+        if threading.current_thread() is racer:
+            reached.set()
+        return real_lock(*a, **kw)
+
+    def watched_open(*a: object, **kw: object) -> object:
+        if threading.current_thread() is racer:
+            # Past the existence check: wait for the import to remove the file.
+            reached.set()
+            assert removed.wait(30)
+        return real_open(*a, **kw)
+
+    def import_then_race(self: VectorMemoryStore, data: dict) -> dict:
+        racer.start()
+        assert reached.wait(30)
+        return real_import(self, data)
+
+    monkeypatch.setattr(cc, "memory_store_namespace_lock", watched_lock)
+    monkeypatch.setattr(cc, "declared_store", watched_open)
+    monkeypatch.setattr(VectorMemoryStore, "import_memory", import_then_race)
+    with pytest.raises(SystemExit):
+        cc._memory_cmd(_ns(mem_action="import", file=str(dump), store=_ACME))
+    removed.set()
+    racer.join(30)
+    assert not racer.is_alive()
+    capsys.readouterr()
+    assert not db_path.exists()
+    assert exits == [1]
 
 
 class TestAFailedRemovalIsReportedAsOne:
