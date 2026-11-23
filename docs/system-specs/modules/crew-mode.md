@@ -5485,7 +5485,22 @@ call is placed under a capability by the tool the harness stamped on it
 gives it) and its ACP kind; a `fetch` call
 whose tool was not told falls under `web_search` as well as `web_fetch`. A
 call whose capability cannot be told falls under every
-held restriction; every other call behaves as before. The governance ceiling still
+held restriction; every other call behaves as before. A restriction is held as
+narrowly as Crew can read it (`mate_held_scope`): a hook whose matcher names one tool
+no capability covers (`use_aws`) is recorded as `tool:<name>` and holds that tool's
+calls only, and strips only that tool's pre-approval; a `permissions` deny or ask on
+`fs_read`/`fs_write` with only a `match` list, and a read or write `toolsSettings`
+entry whose one limiting key is `deniedPaths`, keep those `paths` and hold only the
+calls of that capability that touch one (the path itself, a path below it, or a folder
+above it, after `~`, the call's own folder and links are resolved). A matcher naming
+more than one tool, a rule or setting that limits more than paths, and a call whose
+target cannot be told (no path, a variable, a relative path with no folder, a cut-short
+scan) are held as before. Records an earlier release wrote wider are narrowed once at
+startup from the old agent (`mate_held_rescope.rescope_held_limits`, ledger key
+`held_scope_rechecked`); it only ever narrows, and a Bot whose old agent cannot be read
+keeps its record and is tried again. A dashboard card a held limit raised carries a
+notice naming the limit (`mate_held_rules.card_notice`, redacted at the call site), so
+a person under Trust can tell why it asked. The governance ceiling still
 governs the merged worker spec. A Bot an earlier release moved without its old
 agent's restrictions gets the same carry at startup
 (`mate_policy_repair.restore_dropped_policy`, run from `migrate_existing_crewmates`
