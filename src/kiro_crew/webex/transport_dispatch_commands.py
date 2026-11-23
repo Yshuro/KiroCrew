@@ -312,11 +312,14 @@ async def _handle_yolo(self: WebexDispatcher, inbound: "WebexInbound") -> None:
                 reply = "❌ Couldn't turn YOLO on (audit system unavailable)."
                 outcome = "denied"
         elif action == "off":
+            from kiro_crew import kept_grants
+
             # Unconditional: deactivate() also zeroes the deadline of a grant
             # that already lapsed, which closes the renew grace window so a
             # later "/yolo renew" cannot resurrect it, and records the
             # operator's decision either way.
             await asyncio.to_thread(so.deactivate, "webex")
+            await kept_grants.settle()  # its kept record is off the disk for good first
             reply = "🔴 YOLO OFF — tools ask for approval again."
         else:
             renewed = (await asyncio.to_thread(so.renew, "webex")).renewed

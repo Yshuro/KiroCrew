@@ -25,10 +25,16 @@ file is deleted, audited and read as absent. Nothing is written while that key i
 the in-memory fallback, because no later boot could verify it.
 
 The mark itself is unsigned on purpose: its only effect is to end grants.
+
+A delete that ends a grant, a guarded write's rename and the mark are each made
+durable by a sync of the directory before they are acknowledged, so a power loss
+right after cannot bring back what the user ended. That sync runs off the event loop's
+thread (:func:`settle`); only a Ctrl+C mark written when no thread can start syncs on it.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -42,7 +48,7 @@ from pathlib import Path
 from typing import Any
 
 from kiro_crew import platform_compat
-from kiro_crew.atomic_write import atomic_write
+from kiro_crew.atomic_write import atomic_write, fsync_dir
 from kiro_crew.bounded_read import bounded_read_fd
 from kiro_crew.config.loader import config_dir
 
@@ -182,6 +188,30 @@ def _remove(path: Path) -> None:
         logger.warning("kept grants: could not remove %s", path, exc_info=True)
 
 
+def _sync_dir(directory: Path) -> None:
+    """Sync *directory*'s entries, so its last deletes and renames survive a power loss.
+
+    Best effort: the change it makes durable has already happened, so a failed sync is
+    logged, not raised. Blocks for as long as the disk takes: call it off the event
+    loop's thread and outside any lock the loop takes.
+    """
+    if directory.is_dir():
+        fsync_dir(directory, best_effort=True)
+
+
+async def settle() -> None:
+    """Return once every delete and rename already made in the record directory is durable.
+
+    The sync runs on a worker thread. Every path that acknowledges a user's turn-off
+    awaits it after the change and before its answer, never inside the change itself,
+    so the grant is already off in memory while the disk catches up. Never raises.
+    """
+    try:
+        await asyncio.to_thread(_sync_dir, kept_dir())
+    except Exception:
+        logger.warning("kept grants: could not sync the record directory", exc_info=True)
+
+
 def write_record(
     name: str,
     kind: str,
@@ -202,8 +232,9 @@ def write_record(
     ``still_current()`` holds, so a revocation that took *lock* after this write
     sampled its body is never undone by it. *on_commit* runs under *lock* right after
     the rename, so a caller's record of what is on disk changes with the file itself.
-    *lock* is held for that rename and *on_commit*, never across the write, so a
-    thread that takes it waits for one syscall. Never raises.
+    *lock* is held for that rename and *on_commit*, never across the write or the
+    directory sync that makes the rename durable, so a thread that takes it waits for
+    one syscall. Never raises.
     """
     try:
         key = _mac_key()
@@ -251,13 +282,16 @@ def _write_then_commit(
     finally:
         os.close(fd)
     with lock:
-        if still_current():
+        committed = still_current()
+        if committed:
             os.replace(tmp, path)
             if on_commit is not None:
                 on_commit()
-            return True
-    _remove(tmp)
-    return False
+    if not committed:
+        _remove(tmp)
+        return False
+    _sync_dir(path.parent)
+    return True
 
 
 def remove_record(name: str, *, home: Path | None = None) -> None:
@@ -332,7 +366,10 @@ def mark_user_stop(via: str) -> bool:
         if directory is None:
             return False
         payload = json.dumps({"version": 1, "via": str(via)[:32], "at": time.time()})
-        atomic_write(directory / USER_STOP_FILE, payload, mode=0o600)
+        # Durable before the stop goes ahead, so a power loss right after it still
+        # ends the grants.
+        atomic_write(directory / USER_STOP_FILE, payload, mode=0o600, fsync=True)
+        _sync_dir(directory)
     except Exception:
         logger.warning("kept grants: could not write the user-stop mark", exc_info=True)
         return False

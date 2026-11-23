@@ -300,6 +300,25 @@ class TestRunYoloCommand:
         assert grant.is_active() is False
         assert audit.rows[0]["resources"] == "yolo_off"
 
+    def test_off_is_confirmed_only_once_its_record_is_off_the_disk(
+        self, grant: Any, audit: _Sel, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from kiro_crew import kept_grants
+
+        grant.activate("test")
+        active_at_sync: list[bool] = []
+
+        async def _settled() -> None:
+            active_at_sync.append(grant.is_active())
+
+        monkeypatch.setattr(kept_grants, "settle", _settled, raising=False)
+        reply = asyncio.run(
+            run_yolo_command("off", source="telegram", caller="7", phrasing=YOLO_PHRASING_PLAIN)
+        )
+        # Synced after the off, before the reply that confirms it.
+        assert active_at_sync == [False]
+        assert reply == "🔴 YOLO OFF — tools ask for approval again."
+
     def test_renew_on_an_inactive_grant_names_the_channels_own_command(
         self, grant: Any, audit: _Sel
     ) -> None:
