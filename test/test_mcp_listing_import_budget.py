@@ -95,11 +95,15 @@ FORBIDDEN_BEFORE_THE_LIST = (
 #: floor), ``argv_floor_tar`` (the line-cap split of its tar grammar) and
 #: ``argv_floor_ssh_operand`` (the line-cap split of the ssh operand reader). The security
 #: package loads before the list, so the owners cannot move behind it; nothing else loads.
+#: Raised by 1 for each server: the line-cap split of ``security.deny_gate`` moved its
+#: substitution-nesting cap into ``security.deny_gate_nesting``, which the deny gate imports
+#: when the security package loads; the module count rose by that one file and nothing new
+#: loads.
 PACKAGE_MODULE_CEILING = {
-    "mcp-core": 496,
-    "mcp-cron": 364,
-    "mcp-guide": 358,
-    "mcp-mate": 359,
+    "mcp-core": 497,
+    "mcp-cron": 365,
+    "mcp-guide": 359,
+    "mcp-mate": 360,
 }
 
 #: The modules that read the two live values in the spawn tools' descriptions. They are
