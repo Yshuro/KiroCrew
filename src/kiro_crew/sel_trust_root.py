@@ -22,6 +22,7 @@ import hmac
 import json
 import logging
 import os
+import secrets
 import stat
 from dataclasses import asdict
 from pathlib import Path
@@ -264,52 +265,73 @@ def _load_or_create_hmac_key(self: SecurityEventLog) -> bytes:
     # reports THIS resolved path (normally trust/sel_hmac.key; the legacy
     # path only on a failed migration above).
     self._hmac_key_file = key_path
-    if key_path.exists():
-        existing = key_path.read_bytes()
-        # Validate the key BEFORE it ever signs the chain. A
-        # 0-byte or too-short key is accepted silently by hmac.new(),
-        # producing a predictable, forgeable MAC that disables the audit
-        # chain's tamper-evidence. Fail HARD (mirroring token_secret.py's
-        # >= 32-byte requirement) rather than silently falling back to a
-        # weak key. We RAISE instead of regenerating (unlike
-        # token_secret.py's fall-through) because a fresh key would orphan
-        # every already-chained record — an operator must consciously
-        # rotate/restore the key.
-        if len(existing) < _HMAC_KEY_MIN_BYTES:
-            raise RuntimeError(
-                f"SEL HMAC key {key_path} is too short ({len(existing)} bytes; "
-                f"require >= {_HMAC_KEY_MIN_BYTES}). Refusing to sign the audit "
-                "chain with a weak/forgeable key. Restore the correct key from "
-                "backup, or remove the file to start a fresh chain with a new key."
-            )
-        # Re-enforce owner-only perms at LOAD time, not just at creation:
-        # the mode may have been relaxed since (backup restore, manual edit,
-        # migration) and this key signs the entire audit chain — a
-        # group/world-readable key lets any local user forge valid MACs.
-        # Mirrors token_secret.py's load-time restrict_to_owner. Fail-SOFT
-        # at the call site (warn, don't crash): a read-only FS / chmod
-        # failure must not take down SecurityEventLog init.
-        try:
-            # The only preceding write to key_path is the legacy-key migration rename,
-            # in a mutually exclusive branch.
-            platform_compat.restrict_to_owner(key_path)  # lockdown-ok: load-time re-assert
-        except OSError:
-            # Logs the key file PATH, never the key bytes.
-            logger.warning(  # nosemgrep: python-logger-credential-disclosure
-                "SECURITY: failed to enforce owner-only permissions on SEL HMAC key %s; "
-                "file may be readable by other users",
-                key_path,
-                exc_info=True,
-            )
-        return existing
-    key = os.urandom(32)
+    if not key_path.exists():
+        key = os.urandom(32)
+        if _publish_key_if_absent(key_path, key):
+            return key
+        # Another process created the key after the check above. Load and sign
+        # with that key, the one on disk, instead of this process's own.
+    existing = key_path.read_bytes()
+    # Validate the key BEFORE it ever signs the chain. A
+    # 0-byte or too-short key is accepted silently by hmac.new(),
+    # producing a predictable, forgeable MAC that disables the audit
+    # chain's tamper-evidence. Fail HARD (mirroring token_secret.py's
+    # >= 32-byte requirement) rather than silently falling back to a
+    # weak key. We RAISE instead of regenerating (unlike
+    # token_secret.py's fall-through) because a fresh key would orphan
+    # every already-chained record — an operator must consciously
+    # rotate/restore the key.
+    if len(existing) < _HMAC_KEY_MIN_BYTES:
+        raise RuntimeError(
+            f"SEL HMAC key {key_path} is too short ({len(existing)} bytes; "
+            f"require >= {_HMAC_KEY_MIN_BYTES}). Refusing to sign the audit "
+            "chain with a weak/forgeable key. Restore the correct key from "
+            "backup, or remove the file to start a fresh chain with a new key."
+        )
+    # Re-enforce owner-only perms at LOAD time, not just at creation:
+    # the mode may have been relaxed since (backup restore, manual edit,
+    # migration) and this key signs the entire audit chain — a
+    # group/world-readable key lets any local user forge valid MACs.
+    # Mirrors token_secret.py's load-time restrict_to_owner. Fail-SOFT
+    # at the call site (warn, don't crash): a read-only FS / chmod
+    # failure must not take down SecurityEventLog init.
+    try:
+        # The only preceding writes to key_path are the legacy-key migration rename
+        # and a sibling process's create, which this process did not make.
+        platform_compat.restrict_to_owner(key_path)  # lockdown-ok: load-time re-assert
+    except OSError:
+        # Logs the key file PATH, never the key bytes.
+        logger.warning(  # nosemgrep: python-logger-credential-disclosure
+            "SECURITY: failed to enforce owner-only permissions on SEL HMAC key %s; "
+            "file may be readable by other users",
+            key_path,
+            exc_info=True,
+        )
+    return existing
+
+
+def _publish_key_if_absent(key_path: Path, key: bytes) -> bool:
+    """Write *key* at *key_path* unless a key is already there; True when *key* landed.
+
+    Two processes that start together on an empty data dir both find no key, and
+    both create one. A rename onto *key_path* lets the second key replace the
+    first, and the first process then signs every record with a key the file on
+    disk does not hold, so ``verify_integrity`` rejects every record it writes. A hard
+    link never replaces a name that exists, so exactly one key is published and
+    the other process loads it (False here).
+    """
+    # The key is written to a private staging name first, then linked to
+    # *key_path*, so the published file is complete from its first moment.
+    # Like any create-then-rename write, a hard kill between the two steps leaves
+    # the staging name behind in the owner-only trust dir: one leftover per kill.
+    staging = key_path.with_name(f".{key_path.name}.{secrets.token_hex(8)}.new")
     # Create the key ATOMICALLY (temp file + rename via ``atomic_write``,
     # whose short-write loop was modelled on the hand-rolled one this call
     # replaces): a plain os.open()+os.write() is NOT atomic — a crash or
     # full-disk partial write leaves a 0-byte/short key on disk, which the
-    # load-time length check above would then reject with a hard
+    # load-time length check would then reject with a hard
     # RuntimeError on the NEXT boot, bricking every SecurityEventLog()
-    # init until an operator manually removes the file. os.replace() makes
+    # init until an operator manually removes the file. The link below makes
     # the key file visible only once it is complete.
     #
     # ``restrict_to_owner=True`` locks the temp file down BEFORE the key
@@ -322,8 +344,23 @@ def _load_or_create_hmac_key(self: SecurityEventLog) -> bytes:
     # implied by ``restrict_to_owner=True`` raises unconditionally, which
     # is the right behavior for the key that signs the audit chain: a
     # pre-planted link under the trust dir is hostile.
-    atomic_write(key_path, key, restrict_to_owner=True, restrict_on_error="warn")
-    return key
+    atomic_write(staging, key, restrict_to_owner=True, restrict_on_error="warn")
+    try:
+        os.link(staging, key_path)
+    except FileExistsError:
+        return False
+    except OSError:
+        # shortcut: a filesystem without hard links publishes by rename, which keeps
+        # the two-process first-start race there. Move to an exclusive create, as
+        # dashboard/token_secret.py does, if such an install needs the race closed.
+        logger.debug("SEL could not link the new HMAC key into place", exc_info=True)
+        atomic_write(key_path, key, restrict_to_owner=True, restrict_on_error="warn")
+    finally:
+        try:
+            staging.unlink()
+        except OSError:
+            logger.debug("SEL could not remove the staged HMAC key", exc_info=True)
+    return True
 
 
 def _compute_hash(self: SecurityEventLog, event: SecurityEvent) -> str:

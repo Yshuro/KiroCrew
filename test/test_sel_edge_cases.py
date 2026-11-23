@@ -134,6 +134,48 @@ class TestHmacKeyManagementExtras:
         assert a._dir == tmp_path
         assert not other.exists()
 
+    def test_a_key_a_sibling_process_published_first_is_kept(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two processes that start together on an empty dir end on one key.
+
+        Both find no key, so both create one. Here the sibling's key lands
+        between this process's existence check and its own write. Replacing it
+        would leave the sibling signing with a key the file on disk does not
+        hold, and verify would reject every record the sibling writes. This process
+        must keep the sibling's key and sign with it.
+        """
+        from kiro_crew import sel
+
+        key_path = tmp_path / "trust" / "sel_hmac.key"
+        sibling_key = b"s" * 32
+        real_atomic_write = sel.atomic_write
+
+        def _sibling_publishes_first(path, data, **kwargs):
+            if not key_path.exists():
+                key_path.write_bytes(sibling_key)
+            return real_atomic_write(path, data, **kwargs)
+
+        monkeypatch.setattr("kiro_crew.sel.atomic_write", _sibling_publishes_first)
+        log = SecurityEventLog(base_dir=tmp_path, sync=True)
+
+        assert key_path.read_bytes() == sibling_key
+        assert log._hmac_key == sibling_key
+        assert sorted(p.name for p in key_path.parent.iterdir()) == ["sel_hmac.key"]
+
+    def test_a_filesystem_without_hard_links_still_creates_the_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def _no_hard_links(*_a, **_kw):
+            raise PermissionError(1, "hard links not supported")
+
+        monkeypatch.setattr("kiro_crew.sel_trust_root.os.link", _no_hard_links)
+        log = SecurityEventLog(base_dir=tmp_path, sync=True)
+
+        key_path = tmp_path / "trust" / "sel_hmac.key"
+        assert log._hmac_key == key_path.read_bytes()
+        assert sorted(p.name for p in key_path.parent.iterdir()) == ["sel_hmac.key"]
+
 
 class TestLogHashAndCallbackExtras:
     def test_compute_hash_is_deterministic(self, tmp_path: Path) -> None:
