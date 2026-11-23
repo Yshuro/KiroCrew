@@ -243,6 +243,14 @@ describe('a drop between two rows, in any sort', () => {
     expect(order(['a', 'b', 'c'])).toEqual(['a', 'b', 'c'])
   })
 
+  it('under "In progress, then newest" seeds the order on screen, the running row first', async () => {
+    renderSidebar([ABC[0], ABC[1], { ...ABC[2], running: true }], 'active-then-date')
+    expect(order(['a', 'b', 'c'])).toEqual(['c', 'a', 'b'])
+    // b dropped onto a: it moved up, so it lands above a.
+    drop('b', onRow('a'))
+    await waitFor(() => expect(manualWrites()).toEqual([{ op: 'seed', keys: ['c', 'b', 'a'] }]))
+  })
+
   it('under Manual moves only the dragged row, seating the new sessions drawn beside it', async () => {
     gw.manual = { order: ['a', 'b'], stored: true, rev: 100 }
     // c is new since the order was saved, so it shows on top.

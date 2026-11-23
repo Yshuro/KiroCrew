@@ -125,9 +125,11 @@ function manualOrderQueue(store: object): { tail: Promise<unknown> } {
   return queue
 }
 
-export function useManualSessionOrder({ localSlots, pinned, sortKey, setSortKey }: {
+export function useManualSessionOrder({ localSlots, pinned, running, sortKey, setSortKey }: {
   localSlots: Slot[]
   pinned: ReadonlySet<string>
+  /** The sidebar's running set, which "In progress, then newest" draws first. */
+  running: ReadonlySet<string>
   sortKey: SortKey
   setSortKey: (key: SortKey) => void
 }) {
@@ -145,10 +147,13 @@ export function useManualSessionOrder({ localSlots, pinned, sortKey, setSortKey 
   const manualRank = useMemo(() => new Map(manualOrder.map((key, index) => [key, index])), [manualOrder])
   // The unpinned rows in the order they are drawn now, whatever the sort: a
   // drop lands in this order, and a first drag seeds it.
+  // Only "In progress, then newest" reads the running set, so only it re-sorts on it.
+  const runningFirst = sortKey === 'active-then-date' ? running : null
   const drawnOrder = useMemo(() => (sortKey === 'manual'
     ? manualDrawnOrder(localSlots, pinned, manualRank)
-    : localSlots.filter(slot => !pinned.has(slot.key)).sort((a, b) => compareBySort(a, b, sortKey)).map(slot => slot.key)),
-  [sortKey, localSlots, pinned, manualRank])
+    : localSlots.filter(slot => !pinned.has(slot.key))
+      .sort((a, b) => compareBySort(a, b, sortKey, slot => !!runningFirst?.has(slot.key))).map(slot => slot.key)),
+  [sortKey, localSlots, pinned, manualRank, runningFirst])
   const drawnIndex = useMemo(() => new Map(drawnOrder.map((key, index) => [key, index])), [drawnOrder])
   const manualOrderError = useAppSelector(state => state.dashboard.manualOrderError ?? '')
   const setManualOrderErrorText = useCallback((message: string) => { dispatch(setManualOrderError(message)) }, [dispatch])
