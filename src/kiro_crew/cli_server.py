@@ -941,7 +941,6 @@ if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and
         _restart,
         _signing_key_refusal_lines,
         _spawn_detached_gateway,
-        _wait_for_pids_exit,
         _wait_gateway_ready,
         _warn_restart_ready_override,
     )
@@ -949,6 +948,7 @@ if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and
         _MAX_ECHOED_NAME_LEN,
         _SHUTDOWN_RESPONSE_MAX_BYTES,
         _SUPERVISOR_SEARCH_DEPTH,
+        TOTAL_SHUTDOWN_BUDGET_SECS,
         _config_dir_owner,
         _desktop_supervisor_pid,
         _force_stop_command,
@@ -968,6 +968,7 @@ if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and
         _stop_mcp_gateway_daemon,
         _terminal_safe_name,
         _verified_loopback_gateway_pids,
+        _wait_for_pids_exit,
         desktop_app_supervisor,
     )
     from kiro_crew.cli_server_update import (  # noqa: F401
