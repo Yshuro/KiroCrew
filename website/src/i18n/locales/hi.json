@@ -11285,6 +11285,7 @@
       "undo_delete_secret": "सीक्रेट हटाओ",
       "undo_unavailable": "यह बदलाव वापस नहीं लिया जा सकता।",
       "undo_unavailable_overwrites": "वापस नहीं लिया जा सकता: इसने पहले से मौजूद सीक्रेट को बदल दिया।",
+      "gateway_restart_required": "इस Bot का वर्कर यह MCP सर्वर गेटवे के ज़रिए सिर्फ़ गेटवे के फिर शुरू होने के बाद ही पाता है।",
       "cron_every_day": "हर दिन",
       "cron_every_minute": "हर मिनट",
       "cron_every_hour": "हर घंटे",

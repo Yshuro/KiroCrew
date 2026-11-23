@@ -56,6 +56,71 @@ def _connections() -> dict[str, dict]:
     }
 
 
+def _put_routed(service: CapabilityService, name: str, body: object) -> tuple[dict, bool]:
+    """Save, and say whether it gave a Bot's own file a gateway-routed server.
+
+    Routed: a ``set`` of an ``mcpServers`` entry named in the current
+    ``mcp_gateway.stub_servers``, on a Bot that owns its file. Only such a save
+    changes what the Bot's overlay must carry. Blocking.
+    """
+    result = service.put(name, body)
+    if result.get("mode") != "mate" or not isinstance(body, dict):
+        return result, False
+    ids = {
+        op.get("id")
+        for op in body.get("operations") or []
+        if isinstance(op, dict) and op.get("section") == "mcpServers" and op.get("action") == "set"
+    }
+    if not ids:
+        return result, False
+    try:
+        stubs = frozenset(KiroCrewConfig.load().mcp_gateway.stub_servers)
+    except Exception:  # noqa: BLE001 - the save is done; it only skips the refresh
+        logger.warning("Could not read mcp_gateway.stub_servers after a Bot save", exc_info=True)
+        return result, False
+    return result, bool(ids & stubs)
+
+
+async def _put_and_refresh_overlays(service: CapabilityService, name: str, body: object) -> dict:
+    """Save under the overlay refresh, so the Bot's worker gets its new routed stub.
+
+    The write runs as the refresh's ``register`` step, under the broker's
+    refresh lock: a write landing between the refresh's probe and its publish
+    would publish a stub for a target the daemon does not hold. With no broker
+    (or a refresh that failed before registering) the save runs here instead.
+    A refresh that needs a gateway restart is surfaced as
+    ``gateway_restart_required`` for the change card.
+    """
+    from kiro_crew.dashboard.handlers.agents import _get_config_lock
+    from kiro_crew.mcp_gateway.overlay_refresh import refresh_after_agent_change
+
+    box: list = []
+
+    async def _register() -> bool:
+        try:
+            async with _get_config_lock():
+                box.append(await drained_to_thread(_put_routed, service, name, body))
+        except Exception as exc:  # noqa: BLE001 - re-raised below, after the refresh
+            # A refused save wrote nothing, so there is nothing to rewrite.
+            box.append(exc)
+            return False
+        except BaseException as exc:
+            box.append(exc)
+            raise
+        return box[0][1]
+
+    refreshed = await refresh_after_agent_change(_register)
+    if not box:  # no broker serves, or the refresh failed before registering
+        async with _get_config_lock():
+            box.append(await drained_to_thread(_put_routed, service, name, body))
+    if isinstance(box[0], BaseException):
+        raise box[0]
+    result, routed = box[0]
+    if routed and isinstance(refreshed, dict) and refreshed.get("restart_required") is True:
+        result["gateway_restart_required"] = True
+    return result
+
+
 async def api_member_capabilities(request: web.Request) -> web.Response:
     operation = "member_capabilities." + request.method.lower()
     denied = await require_owner_dashboard_request(request, operation)
@@ -82,10 +147,7 @@ async def api_member_capabilities(request: web.Request) -> web.Response:
             if request.method == "POST":
                 result = await drained_to_thread(service.preview, name, body)
             else:
-                from kiro_crew.dashboard.handlers.agents import _get_config_lock
-
-                async with _get_config_lock():
-                    result = await drained_to_thread(service.put, name, body)
+                result = await _put_and_refresh_overlays(service, name, body)
                 request.app["state"].push_refresh("agents")
                 if result.get("mode") == "mate":
                     # A crewmate that owns its file: its running workers mount

@@ -2300,9 +2300,11 @@ What the pass does with a Bot file is what it does with an agent spec: the
 same hardened reader, the same `_rewrite_single_spec`, the same launch approvals
 (an unapproved launch stays unwrapped), the same env-sidecar ledger and prune,
 and the same fingerprint and cache (the files sign as the `mate_sources` input,
-which an app overlay refresh may see change; a new target still makes the refresh
-wait for a restart). It differs in four places. The stub's `--agent` identity is
-`crewmate:<id>`, never the file's own `name`, so the sidecar
+which an app overlay refresh, or the refresh a change card runs when it adds or
+changes a gateway-routed server on a Bot, may see change; a new target still
+makes the refresh wait for a restart, and the card then says so). It differs
+in four places. The stub's `--agent` identity is `crewmate:<id>`, never the
+file's own `name`, so the sidecar
 (`env_sidecar_name(agent, server)`) and caller identity are the Bot's own. A
 file gets no settings injection: the worker's servers are its Bot file's. A
 file is taken only when it is a plain file (no symlink) in a plain folder, is not
@@ -2408,8 +2410,15 @@ before; the stub identity itself, and so the pool and sidecar names, stay the
 Bot's own.
 
 An edited Bot file can run on its older stub until the next pass. Overlays
-are written at gateway start and on an app overlay refresh, while the worker's
-governed spec is read at session start, and the lookup matches by server name.
+are written at gateway start, on an app overlay refresh, and on the refresh a
+`crewmate.capabilities` change card runs when its save adds or changes a
+gateway-routed server (one in `mcp_gateway.stub_servers`) on a Bot that owns its
+file: the save writes the file inside that refresh, and the Bot's idle workers
+are reloaded after it. When the refresh refuses (for example, the server's
+launch is a target the running daemon does not hold), the overlay is left as it
+was and the applied card shows a line saying the Bot's worker gets the server
+through the gateway only after a gateway restart. The worker's governed spec is
+read at session start, and the lookup matches by server name.
 So after an edit (a changed command, args or env, a rotated token) the session
 subtracts the current entry and gets the stub, and the sidecar, of the launch
 the last pass approved. That launch was approved, so this is staleness, not an

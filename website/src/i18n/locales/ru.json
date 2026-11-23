@@ -11807,6 +11807,7 @@
       "undo_delete_secret": "Удалить секрет",
       "undo_unavailable": "Это изменение нельзя отменить.",
       "undo_unavailable_overwrites": "Отменить нельзя: это заменило уже существующий секрет.",
+      "gateway_restart_required": "Воркер этого Bot получит этот MCP-сервер через шлюз только после перезапуска шлюза.",
       "cron_every_day": "Ежедневно",
       "cron_every_minute": "Ежеминутно",
       "cron_every_hour": "Ежечасно",
