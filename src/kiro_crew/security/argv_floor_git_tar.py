@@ -1609,14 +1609,30 @@ def _git_tar_read(text_lower: str, *, typed: bool = False) -> bool:
     # the ssh floor reads them: the typed line goes through the same walk, and a
     # frame or command that does not line up word for word with the lowered one
     # keeps the lowered reading, as does every read reached by recursion.
-    cased_frames: "list[str]" = []
+    cased_walk: "list[tuple[str, list[str]]]" = []
     if typed and raw is not None and raw == raw.lower():
-        cased_frames = [s for s, _ in payload_frames]
+        cased_walk = payload_frames
     elif typed and raw is not None:
         try:
-            cased_frames = [s for s, _ in _shell_payload_walk(_ssh_floor_source_text(raw))]
+            cased_walk = _shell_payload_walk(_ssh_floor_source_text(raw))
         except Exception:
             pass  # the lowered reading only
+    cased_frames = [s for s, _ in cased_walk]
+    # Fail closed when the two readings disagree. The floor reads the line in the
+    # case it was written and lowered and pairs the two passes frame for frame to
+    # read each option word in its written case (``sudo -H`` takes no value,
+    # ``sudo -h`` does). A quote mask or a here-document tag that closes a body in
+    # one pass but not the other can give the two passes a different number of
+    # frames; the floor then cannot line the passes up, and reading an
+    # option lowered would drop its written case. Rather than read on with the
+    # written-case words dropped, such a line is refused when the input carries a
+    # self-dial signal and a frame with no partner could run git or tar (the top
+    # frame, or one ``_frame_cannot_run_git_tar`` keeps), as the capped read is.
+    # Otherwise each frame with no partner keeps the lowered reading.
+    # The walk reads a payload once, so payloads that differ only in case
+    # (``bash -c 'x -H' && bash -c 'x -h'``) are one lowered frame but two written
+    # ones. Then each lowered frame is read once per written spelling whose source
+    # and words lower to the frame's own.
     signals: "list[bool]" = []
 
     def _signal() -> bool:
@@ -1625,7 +1641,25 @@ def _git_tar_read(text_lower: str, *, typed: bool = False) -> bool:
             signals.append(_carries_self_dial_signal())
         return signals[0]
 
-    for frame_index, (source, _tokens) in enumerate(payload_frames):
+    reads: "list[tuple[int, str, str | None]]" = [
+        (i, s, cased_frames[i] if len(cased_frames) == len(payload_frames) else None)
+        for i, (s, _) in enumerate(payload_frames)
+    ]
+    if typed and raw is not None and raw != raw.lower() and len(cased_frames) != len(reads):
+        spellings: "dict[tuple[str, tuple[str, ...]], list[str | None]]" = {}
+        for spelling, words in cased_walk:
+            lowered = (spelling.lower(), tuple(w.lower() for w in words))
+            if spelling not in spellings.setdefault(lowered, []):
+                spellings[lowered].append(spelling)
+        frame_keys = [(s, tuple(t)) for s, t in payload_frames]
+        lowered_keys = set(frame_keys)
+        unpaired = [(i, k[0]) for i, k in enumerate(frame_keys) if k not in spellings]
+        unpaired += [(i, k[0]) for i, k in enumerate(spellings) if k not in lowered_keys]
+        if any(not i or not _frame_cannot_run_git_tar(s) for i, s in unpaired) and _signal():
+            return True
+        reads = [(i, k[0], c) for i, k in enumerate(frame_keys) for c in spellings.get(k, [None])]
+
+    for frame_index, source, cased_source in reads:
         if frame_index and _frame_cannot_run_git_tar(source):
             continue  # a payload frame with no git/tar word dials nothing
         # The walk also returns the rest of the line after each escaped backtick
@@ -1655,8 +1689,7 @@ def _git_tar_read(text_lower: str, *, typed: bool = False) -> bool:
         ):
             return True
         cased_commands: "list[list[str]]" = []
-        if len(cased_frames) == len(payload_frames):
-            cased_source = cased_frames[frame_index]
+        if cased_source is not None:
             cased_commands = (
                 raw_commands if cased_source == source else _view_commands(cased_source)[0]
             )

@@ -1,0 +1,9 @@
++33
+The git/tar-to-self floor fails closed when its original-case and lowered
+readings of a line disagree: a frame of one reading with no partner in the other
+is refused rather than read on with the written-case option words dropped. As in
+the floor's other fail-closed reads, the refusal needs a self-dial signal and an
+unpaired frame that could run git or tar; otherwise the frame keeps the lowered
+reading. Payloads that differ only in case are one lowered frame but two written
+ones, so each lowered frame is read once per written spelling that lowers to it
+instead of counting that as a disagreement. A comment explains the guard.

@@ -1185,7 +1185,23 @@ Two mechanisms make "the split changed nothing for a caller" a tested claim rath
     pass dedups would survive in the original-case pass, the two frame counts would
     diverge, and the floor would drop the option words it reads in the written case
     and lose a denial it should make. This holds whether the `<<` opens a real body
-    or none at all (a here-string `<<<`, an arithmetic `<<` shift). The ordinary
+    or none at all (a here-string `<<<`, an arithmetic `<<` shift). As a backstop,
+    the git/tar floor FAILS CLOSED when the two passes still disagree: if the
+    original-case and lowered walks of a line produce a different number of frames
+    and a frame of one walk has no partner in the other (same source and words once
+    lowered), it refuses the line rather than read on with the written-case option
+    words dropped. Like the floor's other fail-closed reads, it refuses only when
+    the input carries a self-dial signal and a frame with no partner could run git
+    or tar (the top frame, or a payload frame that names a git/tar word or an
+    expansion); otherwise each such frame keeps the lowered reading, so an ordinary
+    line of that shape (`echo "a;b"; npm start; cat <<EOF` with an `eof` body line)
+    is allowed. Payloads that differ only in case (`bash -c 'git log
+    --format=%H' && bash -c 'git log --format=%h'`) are one lowered frame but two
+    written ones; that is not a disagreement, so the floor reads the lowered frame
+    once per written spelling and every spelling's option words are read. Only a
+    line whose readings genuinely disagree (a rare quote-and-case here-document
+    shape) is refused, and refusing it is the safe direction. The
+    ordinary
     reading and the main-reading pass keep a body's quotes as origin/main read them,
     so the reset pass only ADDS a denial and never removes one. The here-document
     body readers and the untracked fallback are unchanged.
