@@ -10,7 +10,7 @@ name, so the instance state, every patch of a method and every ``__new__`` build
 on the one class.
 
 Instance fields written: ``_recover_attempts``, ``_recover_since``, ``_recovery_by_instance``,
-``_recovery_tasks``, ``_tunnel_epoch``, ``_tunnels``.
+``_recovery_tasks``, ``_tokens``, ``_tunnel_epoch``, ``_tunnels``.
 
 Instance fields read: ``_hop_guard``, ``_lock``, ``_max_recovery``, ``_probe_fails``,
 ``_reconfiguring``, ``_recover_backoff_max``, ``_registry``, ``_ssh_compression``,
@@ -33,7 +33,11 @@ from kiro_crew.instances.registry import Instance, is_headless_provisioner
 from kiro_crew.instances.ssh_tunnel_manager_child import TunnelState, _SshTunnel
 from kiro_crew.instances.ssh_tunnel_manager_transport import _Mint, _TransportParams
 from kiro_crew.instances.token_mint import TokenMintError
-from kiro_crew.instances.validation import SshValidationError, SsmValidationError
+from kiro_crew.instances.validation import (
+    SshValidationError,
+    SsmTargetUnresolvedError,
+    SsmValidationError,
+)
 
 if TYPE_CHECKING:
     from kiro_crew.instances.ssh_tunnel_manager import SshTunnelManager
@@ -452,7 +456,9 @@ async def _recover(self: SshTunnelManager, instance_id: str) -> None:
             return
 
         try:
-            params = self._resolve_transport(inst, await self._with_parent(inst))
+            params = self._resolve_transport(
+                self._with_dialled_target(inst), await self._with_parent(inst)
+            )
         except (SshValidationError, SsmValidationError) as e:
             logger.warning("Self-heal aborted for %s: %s", instance_id, e)
             return
@@ -473,6 +479,42 @@ async def _recover(self: SshTunnelManager, instance_id: str) -> None:
         # lock and stands down when it has moved -- the mint discards its
         # token and `_rebuild` raises _RecoverySuperseded.
         epoch = self._tunnel_epoch.get(instance_id, 0)
+
+    # An asg:/param: target is looked up again here, without the lock, so the
+    # rebuild reaches the instance it names now. A connect or disconnect can land
+    # during that await, so the stamp is read again after it, as after the chained
+    # mint below.
+    try:
+        found = await self._with_resolved_target(inst)
+    except SsmTargetUnresolvedError as e:
+        # A lookup can come right by itself (a rolling replacement ends with one
+        # instance), so it is retried like a failed mint, within the same cap.
+        logger.warning("Self-heal for %s could not look up the SSM target: %s", instance_id, e)
+        self._retry_recovery(
+            instance_id, _recover_backoff_secs(attempts + 1, self._recover_backoff_max)
+        )
+        return
+    skip_tier1 = False
+    if found is not inst:
+        params = self._resolve_transport(found)
+        async with self._lock:
+            if instance_id not in self._tunnels or self._tunnel_epoch.get(instance_id, 0) != epoch:
+                logger.info(
+                    "Self-heal for %s stood down: superseded during its lookup", instance_id
+                )
+                return
+            # Tier 1 reuses the held token, which only the instance the old
+            # forward reached issued, so a forward moving to another instance
+            # drops it. A crew holding none skips to tier 2, which mints from the
+            # instance the forward will reach before it rebuilds. The stamp moves
+            # as a failed tier-1 install would move it, so tier 2 binds to the
+            # generation it expects and a mint in flight for the old forward is
+            # refused.
+            if params.ssm_target != current.status.ssm_target:
+                self._tokens.pop(instance_id, None)
+            if not self._tokens.get(instance_id):
+                skip_tier1 = True
+                self._tunnel_epoch[instance_id] = epoch + 1
 
     # A chained crew's whole mint answer is taken at the top of this recovery
     # and carried here until the forward rides the hop it named.
@@ -539,15 +581,17 @@ async def _recover(self: SshTunnelManager, instance_id: str) -> None:
         chained_mint = mint
 
     # Tier 1 — rebuild tunnel, reuse existing token.
-    logger.info("Self-heal tier 1 (rebuild tunnel) for %s [attempt %d]", instance_id, attempts)
-    try:
-        rebuilt = await self._rebuild(inst, params, local_port, expected_epoch=epoch)
-    except _RecoverySuperseded:
-        # A connect or disconnect moved the generation mid-rebuild. Not a
-        # tier failure: falling through to tier 2 would re-mint against a
-        # world this recovery has been superseded in.
-        logger.info("Self-heal for %s stood down: superseded mid-rebuild", instance_id)
-        return
+    rebuilt = None
+    if not skip_tier1:
+        logger.info("Self-heal tier 1 (rebuild tunnel) for %s [attempt %d]", instance_id, attempts)
+        try:
+            rebuilt = await self._rebuild(inst, params, local_port, expected_epoch=epoch)
+        except _RecoverySuperseded:
+            # A connect or disconnect moved the generation mid-rebuild. Not a
+            # tier failure: falling through to tier 2 would re-mint against a
+            # world this recovery has been superseded in.
+            logger.info("Self-heal for %s stood down: superseded mid-rebuild", instance_id)
+            return
     if rebuilt is not None:
         # The rebuild's install is the one bump expected past the Phase 1
         # stamp; anything else means the world moved mid-rebuild and
