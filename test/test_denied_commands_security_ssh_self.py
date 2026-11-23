@@ -1670,6 +1670,15 @@ class TestSandboxEscapeSshSelf:
             "x=\"$(cat <<'E' | sh\nssh -p 22 %s id\nE\n)\"",
             "x=\"$(cat <<'E' >s; sh s\nssh -p 22 %s id\nE\n)\"",
             'x="$(cat <<<y; ssh -p 22 %s id)"',
+            # ``cat -`` text on a line that is not one message command, or beside
+            # another command, piped, written to a file, with an unquoted tag or in a
+            # body holding a backslash (bash may un-escape it first), is read.
+            "x=\"$(cat - <<'E'\nssh -p 22 %s id\nE\n)\"",
+            "gh pr create --body \"$(cat - <<'E'\nx\nE\nssh -p 22 %s id)\"",
+            "gh pr create --body \"`cat - <<'E\\\\OF'\nprinted\nE\\OF\nssh -p 22 %s id\n`\"",
+            "gh pr create --body \"$(cat -- <<'E' | sh\nssh -p 22 %s id\nE\n)\"",
+            "gh pr create --body \"$(cat -n <<'E' >s; sh s\nssh -p 22 %s id\nE\n)\"",
+            'gh pr create --body "$(cat - <<E\n$(ssh -p 22 %s id)\nE\n)"',
             # A body inside an unquoted substitution, and after ``$$``.
             'echo $(echo "$(ssh -p 22 %s id)")',
             'echo "$$$(ssh -p 22 %s id)"',
@@ -1695,6 +1704,13 @@ class TestSandboxEscapeSshSelf:
             'echo "\\$(ssh -p 22 %s id)"',
             # The text that ``cat`` prints from a quoted-tag heredoc is data.
             "gh pr create --body \"$(cat <<'EOF'\n- ssh -p 22 %s id\nEOF\n)\"",
+            # So is the text of ``cat -``, ``cat --`` and ``cat -n``, when that ``cat``
+            # is the whole body on a line that is one message command.
+            "gh pr create --body \"$(cat - <<'EOF'\n- ssh -p 22 %s id\nEOF\n)\"",
+            "gh issue comment 5 -b \"$(cat -- <<'EOF'\n- ssh -p 22 %s id\nEOF\n)\"",
+            "git commit -m \"$(cat -n <<'EOF'\nfix: ssh -p 22 %s id\nEOF\n)\"",
+            "gh pr create --body \"`cat - <<'EOF'\n- ssh -p 22 %s id\nEOF\n`\"",
+            'gh pr create --body "$(cat - <<\'EOF\'\nSee "a (b)": ssh -p 22 %s id\nEOF\n)"',
         ],
     )
     def test_double_quoted_substitution_rows_that_stay_allowed(self, cmd):
