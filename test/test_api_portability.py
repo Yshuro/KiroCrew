@@ -755,6 +755,63 @@ async def test_the_app_notice_is_bounded_like_the_template_notice(monkeypatch, t
     assert named[1:] == [f"app-{i:02d}" for i in range(19)] + ["+4"]
 
 
+def test_the_import_names_the_apps_this_machine_has_not_set_up(monkeypatch, tmp_path) -> None:
+    """The export records the apps its notice names; the import names each one this
+    machine lacks, or has off though it was on there. One that was off there and is
+    installed here is not named, and the import installs nothing."""
+    portability = importlib.import_module("kiro_crew.portability")
+    source, target = tmp_path / "source", tmp_path / "target"
+    _install_app_record(source, "notes", origin="builtin", display_name="Notes Board")
+    _install_app_record(source, "quiet", origin="builtin", display_name="Quiet", enabled=False)
+    _install_app_record(source, "minimal-app", origin="local", display_name="Minimal App")
+    _install_app_record(source, "parked", origin="local", display_name="Parked", enabled=False)
+    _install_app_record(target, "notes", origin="builtin", display_name="Notes", enabled=False)
+    _install_app_record(target, "parked", origin="local", display_name="Parked", enabled=False)
+    monkeypatch.setenv("KIROCREW_HOME", str(source))
+    archive, manifest = portability.create_export_zip()
+    zip_path = tmp_path / "export.zip"
+    zip_path.write_bytes(archive)
+    monkeypatch.setenv("KIROCREW_HOME", str(target))
+
+    summary = portability.apply_import_zip(zip_path, mode="merge")
+
+    assert summary.get("missing_apps") == ["Minimal App", "Notes Board"]
+    assert "missing_apps_more" not in summary
+    assert manifest.get("unbundled_apps") == [
+        {"id": "minimal-app", "name": "Minimal App", "enabled": True},
+        {"id": "notes", "name": "Notes Board", "enabled": True},
+        {"id": "parked", "name": "Parked", "enabled": False},
+    ]
+    assert sorted(entry.name for entry in (target / "apps").iterdir()) == ["notes", "parked"]
+
+
+def test_the_import_reads_the_archive_app_list_as_untrusted(monkeypatch, tmp_path) -> None:
+    """An id that is not an app name is skipped, a name is clipped, an unreadable
+    record here counts as off, and an archive with no list names none."""
+    portability = importlib.import_module("kiro_crew.portability")
+    mc = tmp_path / "home"
+    _install_app_record(mc, "here", origin="local")
+    _install_app_record(mc, "deep", origin="local")
+    (mc / "apps" / "deep" / "installed.json").write_text("[" * 100_000, encoding="utf-8")
+    monkeypatch.setenv("KIROCREW_HOME", str(mc))
+    long_name = "L" * (portability.MAX_TEMPLATE_NAME_CHARS + 5)
+    rows = [
+        {"id": "../escape", "name": "Escape", "enabled": True},
+        {"id": "here", "name": "Here", "enabled": True},
+        {"id": "deep", "name": "Deep", "enabled": True},
+        {"id": "gone", "name": "", "enabled": "no"},
+        {"id": "long", "name": long_name},
+        "junk",
+    ]
+
+    assert portability.apps_not_set_up({"unbundled_apps": rows}) == (
+        ["Deep", "gone", "L" * (portability.MAX_TEMPLATE_NAME_CHARS - 1) + "\u2026"],
+        0,
+    )
+    assert portability.apps_not_set_up({"version": 3}) == ([], 0)
+    assert portability.apps_not_set_up(None) == ([], 0)
+
+
 # --- The export streams, so the first byte does not wait for the whole build ---
 
 

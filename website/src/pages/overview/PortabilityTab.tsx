@@ -479,6 +479,15 @@ export default function PortabilityTab() {
           const crews = joinWithMore(missing.map(m => `${m.crew} → ${m.kiro_agent}`), more)
           warnings.push(i18nT('pages.overview.portabilityTab.import_templates_missing', { crews }))
         }
+        // No archive carries an app: the apps the other machine had that this one
+        // has not set up. Two apps may share a name, so a repeat is kept.
+        const missingApps: string[] = Array.isArray(summary.missing_apps)
+          ? summary.missing_apps.filter((n: unknown): n is string => typeof n === 'string')
+          : []
+        if (missingApps.length) {
+          const names = joinWithMore(missingApps, summary.missing_apps_more || 0)
+          warnings.push(i18nT('pages.overview.portabilityTab.import_apps_missing', { names }))
+        }
         // A refused item is a failure, not a caveat: it renders as an error even
         // though the import as a whole succeeded.
         const errors: string[] = []
