@@ -858,6 +858,27 @@ def _fresh_hardlink_spec_warnings():
 
 
 @per_test_guard
+def _fresh_kas_env_left_out_marks():
+    """Start and end each test with no KAS self-reference left-out line already logged.
+
+    ``acp.kas_env_launch._LEFT_OUT_LOGGED`` holds the (agent, server, keys) marks
+    whose "left out, the engine's own value reaches the server" INFO line this
+    process gave, so a mark an earlier test on the same worker logged would silence
+    this test's line. Only when already imported, and read with ``getattr`` so a
+    tree without the set still runs its tests.
+    """
+    launch = sys.modules.get("kiro_crew.acp.kas_env_launch")
+    marks = getattr(launch, "_LEFT_OUT_LOGGED", None)
+    if marks is not None:
+        marks.clear()
+    yield
+    launch = sys.modules.get("kiro_crew.acp.kas_env_launch")
+    marks = getattr(launch, "_LEFT_OUT_LOGGED", None)
+    if marks is not None:
+        marks.clear()
+
+
+@per_test_guard
 def _reset_cjk_segmenter():
     """Forget session search's registered Chinese segmenter around each test.
 

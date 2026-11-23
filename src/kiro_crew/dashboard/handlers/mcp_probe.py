@@ -244,24 +244,33 @@ def _annotate_quarantine(rows: list[dict[str, Any]]) -> None:
 
 
 def _annotate_agent_drops(rows: list[dict[str, Any]]) -> None:
-    """Stamp ``agentDropped`` onto rows the latest default-agent rebuild left out.
+    """Stamp what the latest default-agent rebuild left out onto its rows.
 
+    ``agentDropped`` on a server left out because its program was not found.
     Recorded keys may be raw spec names while rows use canonical aliases.
     Exact-name matches win over aliases; cached notes are refreshed each time.
+    ``ownEntryUnused`` on an edition server's row whose name the user's own entry
+    also declares for another server, which the agent therefore does not run.
     """
-    from kiro_crew.mcp_dropped_servers import load_dropped
+    from kiro_crew.mcp_dropped_servers import load_dropped, load_unused_own
     from kiro_crew.mcp_utils import mcp_server_alias
 
     drops = load_dropped()
     aliased_drops = {mcp_server_alias(key): drop for key, drop in drops.items()}
+    unused = load_unused_own()
+    aliased_unused = {mcp_server_alias(key): rec for key, rec in unused.items()}
     for row in rows:
         row.pop("agentDropped", None)
+        row.pop("ownEntryUnused", None)
         name = row.get("name")
         if not isinstance(name, str):
             continue
         drop = drops.get(name) or aliased_drops.get(mcp_server_alias(name))
         if drop is not None:
             row["agentDropped"] = drop
+        own = unused.get(name) or aliased_unused.get(mcp_server_alias(name))
+        if own is not None:
+            row["ownEntryUnused"] = own
 
 
 def _record_probe_verdicts(rows: list[dict[str, Any]]) -> None:
