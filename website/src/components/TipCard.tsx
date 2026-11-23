@@ -17,6 +17,7 @@ import { Btn, IconButton } from './ui'
 // component module, or importing it drags this file's router and markdown
 // dependencies along with it.
 import { tipDocHref } from '../utils/docsLink'
+import { localizedTip } from '../utils/curatedTips'
 
 // Optional one-click action button on a tip. A single 'route' kind for now:
 // navigate to an internal dashboard path (an exact settings tab/control via
@@ -59,7 +60,8 @@ interface TipCardProps {
   onDismiss: () => void
 }
 
-export function TipCard({ tip, onDismiss }: TipCardProps) {
+export function TipCard({ tip: servedTip, onDismiss }: TipCardProps) {
+  const tip = localizedTip(servedTip)
   const queryClient = useQueryClient()
   const feedbackMutation = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'dismiss' }) =>
